@@ -92,6 +92,45 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 Saya juga menyiapkan script Windows di [scripts/windows/install_windows.ps1](/Users/gianovembrian/gitlab-project/vehicle_count/scripts/windows/install_windows.ps1) dan wrapper [install_windows.bat](/Users/gianovembrian/gitlab-project/vehicle_count/scripts/windows/install_windows.bat).
 
+## Windows One-Command Bootstrap
+
+Kalau ingin PC Windows baru langsung siap tanpa install manual `Git`, `Python`, dan `PostgreSQL`, gunakan bootstrap script:
+
+- [bootstrap_full_windows.ps1](/Users/gianovembrian/gitlab-project/vehicle_count/scripts/windows/bootstrap_full_windows.ps1)
+- [bootstrap_full_windows.bat](/Users/gianovembrian/gitlab-project/vehicle_count/scripts/windows/bootstrap_full_windows.bat)
+
+Yang dilakukan bootstrap:
+
+1. install `Git` bila belum ada
+2. install `Python 3.11` bila belum ada
+3. install `PostgreSQL` bila belum ada
+4. pastikan `git`, `python`, dan `psql` bisa dipakai
+5. download installer NiceCount
+6. clone repo
+7. buat `.venv`
+8. install package Python
+9. buat `.env`
+10. create database dan apply schema
+11. jalankan NiceCount di `http://127.0.0.1:8000`
+
+Catatan:
+
+- Bootstrap ini butuh `winget` yang biasanya sudah ada di Windows 10/11 modern.
+- Jalankan PowerShell sebagai Administrator, atau script akan meminta elevasi otomatis.
+- Untuk install PostgreSQL secara silent, password superuser **harus diisi**. Default bootstrap memakai `postgres`.
+
+Contoh one-liner paling praktis:
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/gianovembrian/nicecount/main/scripts/windows/bootstrap_full_windows.ps1' -OutFile $env:TEMP\bootstrap_nicecount.ps1; & $env:TEMP\bootstrap_nicecount.ps1 -RepoUrl 'https://github.com/gianovembrian/nicecount.git' -TargetDir 'C:\NiceCount' -PgUser 'postgres' -PgPassword 'postgres' -DatabaseName 'vehicle_count' -OpenBrowser"
+```
+
+Kalau mau password PostgreSQL yang berbeda:
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/gianovembrian/nicecount/main/scripts/windows/bootstrap_full_windows.ps1' -OutFile $env:TEMP\bootstrap_nicecount.ps1; & $env:TEMP\bootstrap_nicecount.ps1 -RepoUrl 'https://github.com/gianovembrian/nicecount.git' -TargetDir 'C:\NiceCount' -PgUser 'postgres' -PgPassword 'MyStrongPassword123!' -DatabaseName 'vehicle_count' -OpenBrowser"
+```
+
 Yang dilakukan script:
 
 1. clone atau update repo
