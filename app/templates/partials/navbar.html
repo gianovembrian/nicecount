@@ -1,0 +1,55 @@
+<header class="app-header-bar">
+  {% set settings_active = active_nav and active_nav.startswith("settings") %}
+  <div class="container-xxl app-topbar d-flex flex-wrap align-items-center justify-content-between gap-5">
+    <div class="app-topbar-brand-group">
+      <div class="app-topbar-badge">NC</div>
+      <div>
+        <div class="app-topbar-brand fs-3">NiceCount</div>
+        <div class="app-topbar-subtitle">Traffic Video Analysis Platform</div>
+      </div>
+    </div>
+
+    <nav class="app-topbar-nav">
+      {% if current_user and current_user.is_admin %}
+      <a class="app-topbar-link{% if active_nav == 'users' %} active{% endif %}" data-app-admin-only href="/users">Users</a>
+      <div class="dropdown app-topbar-dropdown" data-app-admin-only>
+        <button
+          class="app-topbar-link app-topbar-link-toggle{% if settings_active %} active{% endif %}"
+          type="button"
+          data-bs-toggle="dropdown"
+          aria-expanded="false"
+        >
+          <span>Settings</span>
+          <span class="app-inline-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="m7 10 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+        </button>
+        <div class="dropdown-menu app-topbar-dropdown-menu">
+          <a class="dropdown-item app-topbar-dropdown-item{% if active_nav == 'settings-detection' %} active{% endif %}" href="/settings/detection">
+            Detection Thresholds
+          </a>
+          <a class="dropdown-item app-topbar-dropdown-item{% if active_nav == 'settings-master-classes' %} active{% endif %}" href="/settings/master-classes">
+            Master Class
+          </a>
+        </div>
+      </div>
+      {% endif %}
+      <a class="app-topbar-link{% if active_nav == 'videos' %} active{% endif %}" href="/videos">Videos</a>
+      <a class="app-topbar-link{% if active_nav == 'count-lines' %} active{% endif %}" href="/count-lines">Count Lines</a>
+      <a class="app-topbar-link{% if active_nav == 'analysis' %} active{% endif %}" href="/analysis">Analysis</a>
+    </nav>
+
+    <div class="app-topbar-actions">
+      <div class="app-topbar-user">
+        <div class="app-topbar-user-meta">
+          <div class="app-topbar-user-name" data-app-user-name>{{ current_user.full_name if current_user else "-" }}</div>
+          <div class="app-topbar-user-username" data-app-username>{{ current_user.username if current_user else "-" }}</div>
+        </div>
+        <div class="app-topbar-avatar" data-app-user-initial>{{ current_user_initials or "NC" }}</div>
+        <button class="btn btn-sm app-topbar-logout" data-app-logout>Logout</button>
+      </div>
+    </div>
+  </div>
+</header>

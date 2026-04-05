@@ -1,0 +1,161 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div id="videosAlert" class="alert alert-danger hidden"></div>
+
+<div class="card">
+  <div class="card-header border-0 pt-7">
+    <h3 class="card-title m-0">Video List</h3>
+    <div class="card-toolbar">
+      <button class="btn btn-primary app-toolbar-add-btn" type="button" id="openUploadModal">
+        <span class="app-inline-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </span>
+        Add Video
+      </button>
+    </div>
+  </div>
+  <div class="card-body pt-3">
+    <div class="table-responsive app-video-table-shell">
+      <table class="table align-middle table-row-dashed fs-6 gy-4 video-table">
+        <thead>
+          <tr class="text-start text-muted fw-bold fs-7 text-uppercase gs-0">
+            <th>No</th>
+            <th>Preview</th>
+            <th>File Name</th>
+            <th>Description</th>
+            <th>Status</th>
+            <th>Duration</th>
+            <th>Uploaded By</th>
+            <th>Created</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="videosTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="uploadVideoModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Add Video</h2>
+        <button type="button" class="btn btn-sm btn-icon btn-active-light-primary" data-bs-dismiss="modal" aria-label="Close">
+          <span class="app-inline-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </span>
+        </button>
+      </div>
+      <form id="uploadForm">
+        <div class="modal-body py-10 px-lg-17">
+          <div class="row g-6">
+            <div class="col-12">
+              <label class="form-label fw-semibold required">Video File</label>
+              <input class="form-control form-control-solid" type="file" name="file" accept="video/*" required />
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Description</label>
+              <textarea class="form-control form-control-solid" rows="4" name="description" placeholder="Example: Northbound road segment A, 07:00 - 07:30"></textarea>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Recorded Date</label>
+              <input id="uploadRecordedDate" class="form-control form-control-solid" type="date" name="recorded_at_date" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Time</label>
+              <input id="uploadRecordedTime" class="form-control form-control-solid" type="time" name="recorded_at_time" step="60" />
+            </div>
+            <div class="col-12">
+              <label class="form-check form-check-custom form-check-solid">
+                <input class="form-check-input" type="checkbox" name="auto_process" value="true" />
+                <span class="form-check-label fw-semibold">Start analysis immediately after upload</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer d-flex justify-content-end gap-3">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button class="btn btn-primary" type="submit" id="uploadSubmitButton">
+            <span class="indicator-label">Upload Video</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="previewVideoModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title" id="previewVideoTitle">Video Preview</h2>
+        <button type="button" class="btn btn-sm btn-icon btn-active-light-primary" data-bs-dismiss="modal" aria-label="Close">
+          <span class="app-inline-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </span>
+        </button>
+      </div>
+      <div class="modal-body py-10 px-lg-17">
+        <div class="video-player-shell preview-player-shell">
+          <div id="previewVideoLoading" class="preview-video-state">
+            <div class="app-upload-loading mx-auto mb-5" aria-hidden="true">
+              <div class="spinner-border text-primary" role="status"></div>
+            </div>
+            <div class="fs-5 fw-bold text-white mb-2">Preparing video preview</div>
+            <div class="text-gray-400 fs-7">If the original format is not supported by the browser, the system will prepare an MP4 playback version first.</div>
+          </div>
+          <div id="previewVideoError" class="preview-video-state preview-video-state-error hidden">
+            <div class="fs-5 fw-bold text-white mb-2">Video preview is not available yet</div>
+            <div class="text-gray-400 fs-7">This video format is not supported by the browser or preview preparation failed.</div>
+          </div>
+          <video id="previewVideoPlayer" class="video-player rounded w-100" controls preload="metadata"></video>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="uploadLoadingModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-body py-15 px-10 text-center">
+        <div class="app-upload-loading mx-auto mb-7" aria-hidden="true">
+          <div class="spinner-border text-primary" role="status"></div>
+        </div>
+        <div class="fs-2 fw-bold text-gray-900 mb-3">Uploading Video</div>
+        <div class="text-gray-600 fs-6 mb-2">The file is being uploaded to the server. Please wait until the process completes.</div>
+        <div class="text-muted fs-7">Upload time depends on file size and disk speed.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="uploadSuccessModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-body py-15 px-10 text-center">
+        <div class="app-upload-success mx-auto mb-7" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M7 12.5 10.5 16 17.5 9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="fs-2 fw-bold text-gray-900 mb-3">Upload Successful</div>
+        <div id="uploadSuccessMessage" class="text-gray-600 fs-6 mb-7">The video was uploaded successfully.</div>
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="/assets/videos.js"></script>
+{% endblock %}

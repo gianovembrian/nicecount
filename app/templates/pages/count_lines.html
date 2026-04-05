@@ -1,0 +1,145 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div id="countLinesAlert" class="alert alert-danger hidden"></div>
+
+<div class="row g-7 mb-7">
+  <div class="col-xl-4">
+    <div class="card h-100">
+      <div class="card-header">
+        <h3 class="card-title">Selected Video</h3>
+      </div>
+      <div class="card-body d-flex flex-column gap-5">
+        <div class="analysis-selected-video">
+          <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+            <div>
+              <div id="countLinesVideoName" class="analysis-selected-video-name">No video selected</div>
+              <div id="countLinesVideoMeta" class="analysis-selected-video-meta">Select a video and draw up to two counting lines.</div>
+            </div>
+            <button id="openCountLinesVideoPickerButton" class="btn btn-light-primary btn-sm" type="button">Select Video</button>
+          </div>
+          <div id="countLinesVideoBadges" class="d-flex flex-wrap gap-2"></div>
+        </div>
+
+        <div class="rounded border border-gray-300 bg-light p-5">
+          <div class="fw-semibold mb-3">Drawing Mode</div>
+          <div class="d-flex flex-wrap gap-3 mb-4">
+            <button id="lineOrderOneButton" class="btn btn-sm btn-light-warning" type="button">Line 1</button>
+            <button id="lineOrderTwoButton" class="btn btn-sm btn-light-info" type="button">Line 2</button>
+          </div>
+          <div id="countLinesModeText" class="soft-note mb-3">Click two points on the video to create the active line.</div>
+          <div id="countLinesSourceText" class="soft-note">No count line configuration has been set for this video yet.</div>
+        </div>
+
+        <div class="d-flex flex-wrap gap-3">
+          <button id="clearSelectedLineButton" class="btn btn-light-warning" type="button">Clear Active Line</button>
+          <button id="clearAllLinesButton" class="btn btn-light-danger" type="button">Reset All</button>
+          <button id="saveCountLinesButton" class="btn btn-primary" type="button">Save Lines</button>
+        </div>
+
+        <div class="d-flex flex-wrap gap-3">
+          <a id="goToAnalysisButton" class="btn btn-light-primary" href="/analysis">Open Analysis</a>
+          <a id="goToVideosButton" class="btn btn-light" href="/videos">Manage Videos</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-8">
+    <div class="card h-100">
+      <div class="card-header">
+        <h3 class="card-title">Drawing Count Line</h3>
+      </div>
+      <div class="card-body">
+        <div id="countLinesStage" class="video-player-shell count-lines-stage">
+          <video id="countLinesVideoPlayer" class="video-player" controls preload="metadata"></video>
+          <canvas id="countLinesCanvas" class="video-overlay count-lines-overlay"></canvas>
+        </div>
+        <div class="pt-5">
+          <div class="d-flex flex-wrap gap-2 mb-3">
+            <span class="badge badge-light-warning">Line 1</span>
+            <span class="badge badge-light-info">Line 2</span>
+          </div>
+          <div class="soft-note">Tip: pause the video on a clear frame, then click a start point and end point on the road area. A maximum of two lines is allowed, and each vehicle is counted only once when it crosses any active line.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h3 class="card-title">Line Summary</h3>
+  </div>
+  <div class="card-body pt-3">
+    <div class="table-responsive">
+      <table class="table align-middle table-row-dashed fs-6 gy-4">
+        <thead>
+          <tr class="text-start text-muted fw-bold fs-7 text-uppercase gs-0">
+            <th>Line</th>
+            <th>Status</th>
+            <th>Start Point</th>
+            <th>End Point</th>
+          </tr>
+        </thead>
+        <tbody id="countLinesTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="countLinesVideoPickerModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Select Video</h2>
+        <button type="button" class="btn btn-sm btn-icon btn-active-light-primary" data-bs-dismiss="modal" aria-label="Close">
+          <span class="app-inline-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+          </span>
+        </button>
+      </div>
+      <div class="modal-body py-10 px-lg-17">
+        <div class="row g-4 mb-6">
+          <div class="col-lg-8">
+            <label class="form-label fw-semibold">Search Videos</label>
+            <input id="countLinesVideoSearch" class="form-control form-control-solid" type="text" placeholder="Search by filename, description, or uploader" />
+          </div>
+          <div class="col-lg-4">
+            <label class="form-label fw-semibold">Status Filter</label>
+            <select id="countLinesVideoStatusFilter" class="form-select form-select-solid">
+              <option value="all">All Statuses</option>
+              <option value="uploaded">Uploaded</option>
+              <option value="processing">Processing</option>
+              <option value="processed">Processed</option>
+              <option value="failed">Failed</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table align-middle table-row-dashed fs-6 gy-4 analysis-picker-table">
+            <thead>
+              <tr class="text-start text-muted fw-bold fs-7 text-uppercase gs-0">
+                <th>No</th>
+                <th>Preview</th>
+                <th>File Name</th>
+                <th>Status</th>
+                <th>Duration</th>
+                <th>Created</th>
+                <th class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="countLinesVideoPickerBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="/assets/count_lines.js"></script>
+{% endblock %}

@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}{{ page_title }} | NiceCount{% endblock %}</title>
+  <link rel="stylesheet" href="/metronic/assets/plugins/global/plugins.bundle.css" />
+  <link rel="stylesheet" href="/metronic/assets/css/style.bundle.css" />
+  <link rel="stylesheet" href="/assets/app.css" />
+  {% block head_extra %}{% endblock %}
+</head>
+<body class="app-body bg-body">
+  {% block content %}{% endblock %}
+
+  <script src="/metronic/assets/plugins/global/plugins.bundle.js"></script>
+  <script src="/metronic/assets/js/scripts.bundle.js"></script>
+  <script src="/assets/app.js"></script>
+  {% block page_scripts %}{% endblock %}
+</body>
+</html>

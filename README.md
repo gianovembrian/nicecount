@@ -1,0 +1,189 @@
+# NiceCount MVP
+
+MVP aplikasi analisa kendaraan berbasis `FastAPI + PostgreSQL + local storage + YOLO`.
+
+Alur minimum yang sudah dibuat:
+
+1. User login
+2. Admin kelola user
+3. User upload video
+4. User pilih video
+5. Sistem jalankan analisa kendaraan
+6. Hasil event dan total golongan masuk ke database dan tampil di halaman analisa
+
+## Modul
+
+- `Login User`
+- `Kelola User`
+- `Kelola Video`
+- `Analisa Video`
+
+## Halaman Web
+
+- `/login`
+- `/users`
+- `/videos`
+- `/analysis`
+
+Semua halaman memakai asset theme Metronic dari folder `templates/metronic`.
+
+## Struktur Data Utama
+
+- `users`
+- `sites`
+- `count_lines`
+- `video_uploads`
+- `analysis_jobs`
+- `vehicle_events`
+- `analysis_golongan_totals`
+
+## Klasifikasi Golongan
+
+Yang disimpan saat ini:
+
+- `Golongan I`
+- `Golongan II`
+- `Golongan III`
+- `Golongan IV`
+- `Golongan V`
+
+Catatan:
+
+- Untuk `car`, `motorcycle`, dan `bus`, MVP ini memetakan ke `Golongan I`.
+- Untuk `truck`, `Golongan II` sampai `Golongan V` saat ini dihitung dengan heuristik ukuran bounding box dari kamera tunggal.
+- Jadi hasil golongan berat belum bisa dianggap sama dengan hitung sumbu aktual. Itu perlu model/dataset yang lebih spesifik di tahap berikut.
+
+## Setup
+
+1. Buat virtualenv dan install dependency
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+2. Copy env
+
+```bash
+cp .env.example .env
+```
+
+3. Buat database
+
+```bash
+psql -d postgres -f sql/00_create_database.sql
+psql -d vehicle_count -f sql/01_schema.sql
+```
+
+Kalau database sudah terbuat dari schema lama, jalankan migrasi:
+
+```bash
+psql -d vehicle_count -f sql/03_mvp_minimal_app.sql
+```
+
+4. Jalankan server
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+## Windows Auto Install
+
+Saya juga menyiapkan script Windows di [scripts/windows/install_windows.ps1](/Users/gianovembrian/gitlab-project/vehicle_count/scripts/windows/install_windows.ps1) dan wrapper [install_windows.bat](/Users/gianovembrian/gitlab-project/vehicle_count/scripts/windows/install_windows.bat).
+
+Yang dilakukan script:
+
+1. clone atau update repo
+2. buat `.venv`
+3. install package Python
+4. buat `.env`
+5. create database PostgreSQL bila belum ada
+6. apply schema SQL
+7. jalankan NiceCount di `http://127.0.0.1:8000`
+
+Prerequisite Windows:
+
+- `Git`
+- `Python 3.9+`
+- `PostgreSQL` yang sudah terpasang dan `psql.exe` ada di `PATH`
+
+Contoh pakai dari PowerShell setelah repo ada di GitHub:
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/<owner>/<repo>/main/scripts/windows/install_windows.ps1' -OutFile $env:TEMP\install_nicecount.ps1; & $env:TEMP\install_nicecount.ps1 -RepoUrl 'https://github.com/<owner>/<repo>.git' -TargetDir 'C:\NiceCount' -PgUser 'postgres' -PgPassword '' -DatabaseName 'vehicle_count' -OpenBrowser"
+```
+
+Kalau script dijalankan dari folder repo yang sudah ada di Windows:
+
+```powershell
+.\scripts\windows\install_windows.ps1 -UseCurrentDirectory -PgUser postgres -PgPassword ""
+```
+
+Opsi penting:
+
+- `-RepoUrl` : URL repo GitHub
+- `-TargetDir` : folder instalasi di Windows
+- `-PgHost` : default `localhost`
+- `-PgPort` : default `5432`
+- `-PgUser` : default `postgres`
+- `-PgPassword` : password PostgreSQL
+- `-DatabaseName` : default `vehicle_count`
+- `-NoRun` : setup saja, server tidak langsung dijalankan
+- `-UseReload` : jalankan `uvicorn --reload`
+- `-OpenBrowser` : buka browser otomatis ke halaman login
+
+## Bootstrap Default
+
+Saat startup, aplikasi akan memastikan:
+
+- ada user admin default
+- ada site default
+- ada count line aktif default
+
+Default login lokal:
+
+- username: `admin`
+- password: `admin123`
+
+Bisa diubah lewat `.env`.
+
+## Endpoint Utama
+
+- `GET /health`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+- `GET /api/users`
+- `POST /api/users`
+- `PUT /api/users/{user_id}`
+- `PUT /api/users/{user_id}/password`
+- `DELETE /api/users/{user_id}`
+- `GET /api/videos`
+- `POST /api/videos`
+- `GET /api/videos/{video_id}`
+- `PUT /api/videos/{video_id}`
+- `DELETE /api/videos/{video_id}`
+- `POST /api/videos/{video_id}/analysis/start`
+- `GET /api/videos/{video_id}/analysis`
+- `GET /api/videos/{video_id}/analysis/events`
+- `GET /api/videos/{video_id}/analysis/totals`
+
+## Contoh Upload Video
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/videos \
+  -b cookie.txt \
+  -F "description=Video ruas pagi hari" \
+  -F "recorded_at=2026-04-02T07:00:00+07:00" \
+  -F "file=@/path/to/video.mp4"
+```
+
+## Contoh Start Analisa
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/videos/<VIDEO_ID>/analysis/start \
+  -H "Content-Type: application/json" \
+  -b cookie.txt \
+  -d '{}'
+```

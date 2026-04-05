@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vehicle-count"
+version = "0.1.0"
+description = "Batch vehicle counting backend using FastAPI, PostgreSQL, and local video storage"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "fastapi>=0.115,<1.0",
+  "uvicorn[standard]>=0.30,<1.0",
+  "sqlalchemy>=2.0,<3.0",
+  "psycopg[binary]>=3.1,<4.0",
+  "python-dotenv>=1.0,<2.0",
+  "python-multipart>=0.0.9,<1.0",
+  "itsdangerous>=2.2,<3.0",
+  "opencv-python-headless>=4.10,<5.0",
+  "ultralytics>=8.3,<9.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]

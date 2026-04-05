@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}{{ page_title }} | NiceCount{% endblock %}</title>
+  <link rel="stylesheet" href="/metronic/assets/plugins/global/plugins.bundle.css" />
+  <link rel="stylesheet" href="/metronic/assets/css/style.bundle.css" />
+  <link rel="stylesheet" href="/assets/app.css" />
+  {% block head_extra %}{% endblock %}
+</head>
+<body class="app-body">
+  <div class="app-shell d-flex flex-column">
+    {% include "partials/navbar.html" %}
+
+    <main class="py-10">
+      <div class="container-xxl">
+        {% if page_title %}
+        <div class="mb-8">
+          <h1 class="app-page-title fs-2 mb-2">{{ page_title }}</h1>
+          {% if page_subtitle %}
+          <div class="app-subtitle">{{ page_subtitle }}</div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+  </div>
+
+  <script src="/metronic/assets/plugins/global/plugins.bundle.js"></script>
+  <script src="/metronic/assets/js/scripts.bundle.js"></script>
+  <script src="/assets/app.js"></script>
+  {% block page_scripts %}{% endblock %}
+</body>
+</html>

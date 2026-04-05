@@ -1,0 +1,74 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div id="settingsAlert" class="alert alert-danger hidden"></div>
+
+<div class="card">
+  <div class="card-header border-0 pt-7">
+    <h3 class="card-title m-0">Detection Thresholds</h3>
+  </div>
+  <form id="detectionSettingsForm">
+    <div class="card-body pt-3">
+      <div class="row g-6">
+        <div class="col-xl-4 col-md-6">
+          <label class="form-label fw-semibold" for="globalConfidenceInput">Global Confidence</label>
+          <input
+            id="globalConfidenceInput"
+            name="global_confidence"
+            class="form-control form-control-solid"
+            type="number"
+            min="0"
+            max="1"
+            step="0.01"
+            required
+          />
+          <div class="form-text">Applied first by the detection model. Use a value between 0.00 and 1.00.</div>
+        </div>
+        <div class="col-xl-4 col-md-6">
+          <label class="form-label fw-semibold" for="motorcycleMinConfidenceInput">Motorcycle Min Confidence</label>
+          <input
+            id="motorcycleMinConfidenceInput"
+            name="motorcycle_min_confidence"
+            class="form-control form-control-solid"
+            type="number"
+            min="0"
+            max="1"
+            step="0.01"
+            required
+          />
+          <div class="form-text">Additional filter for motorcycle detections before counting.</div>
+        </div>
+        <div class="col-xl-4 col-md-6">
+          <label class="form-label fw-semibold" for="vehicleMinConfidenceInput">Car / Bus / Truck Min Confidence</label>
+          <input
+            id="vehicleMinConfidenceInput"
+            name="vehicle_min_confidence"
+            class="form-control form-control-solid"
+            type="number"
+            min="0"
+            max="1"
+            step="0.01"
+            required
+          />
+          <div class="form-text">Additional filter shared by car, bus, and truck detections.</div>
+        </div>
+      </div>
+
+      <div class="separator my-8"></div>
+
+      <div class="text-muted fs-7">
+        Example: <code>0.35</code> means 35% confidence. The effective class threshold is the higher value between
+        <strong>Global Confidence</strong> and the relevant class-specific threshold.
+      </div>
+    </div>
+    <div class="card-footer d-flex justify-content-end gap-3">
+      <button type="button" id="reloadDetectionSettingsButton" class="btn btn-light">Reload</button>
+      <button type="submit" id="saveDetectionSettingsButton" class="btn btn-primary">Save Settings</button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="/assets/settings.js"></script>
+{% endblock %}
