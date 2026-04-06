@@ -98,6 +98,7 @@ Kalau ingin PC Windows baru langsung siap tanpa install manual `Git`, `Python`, 
 
 - [bootstrap_full_windows.ps1](/Users/gianovembrian/gitlab-project/vehicle_count/scripts/windows/bootstrap_full_windows.ps1)
 - [bootstrap_full_windows.bat](/Users/gianovembrian/gitlab-project/vehicle_count/scripts/windows/bootstrap_full_windows.bat)
+- [NiceCount_Install_Launcher.bat](/Users/gianovembrian/gitlab-project/vehicle_count/scripts/windows/NiceCount_Install_Launcher.bat)
 
 Yang dilakukan bootstrap:
 
@@ -124,6 +125,14 @@ Contoh one-liner paling praktis:
 ```powershell
 powershell -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/gianovembrian/nicecount/main/scripts/windows/bootstrap_full_windows.ps1' -OutFile $env:TEMP\bootstrap_nicecount.ps1; & $env:TEMP\bootstrap_nicecount.ps1 -RepoUrl 'https://github.com/gianovembrian/nicecount.git' -TargetDir 'C:\NiceCount' -PgUser 'postgres' -PgPassword 'postgres' -DatabaseName 'vehicle_count' -OpenBrowser"
 ```
+
+Kalau user tidak ingin buka PowerShell, kamu juga bisa berikan file:
+
+```text
+scripts\windows\NiceCount_Install_Launcher.bat
+```
+
+File itu bisa langsung di-double-click untuk bootstrap penuh.
 
 ## Windows One-Command Update
 
