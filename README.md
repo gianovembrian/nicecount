@@ -131,6 +131,7 @@ Untuk server Windows yang **sudah terinstall**, gunakan update script ini:
 
 - [update_windows.ps1](/Users/gianovembrian/gitlab-project/vehicle_count/scripts/windows/update_windows.ps1)
 - [update_windows.bat](/Users/gianovembrian/gitlab-project/vehicle_count/scripts/windows/update_windows.bat)
+- [NiceCount_Update_Launcher.bat](/Users/gianovembrian/gitlab-project/vehicle_count/scripts/windows/NiceCount_Update_Launcher.bat)
 
 Yang dilakukan script update:
 
@@ -150,6 +151,34 @@ One-liner update yang bisa langsung dijalankan di PowerShell:
 ```powershell
 powershell -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/gianovembrian/nicecount/main/scripts/windows/update_windows.ps1' -OutFile $env:TEMP\update_nicecount.ps1; & $env:TEMP\update_nicecount.ps1 -RepoUrl 'https://github.com/gianovembrian/nicecount.git' -TargetDir 'C:\NiceCount' -PgUser 'postgres' -PgPassword 'postgres' -DatabaseName 'vehicle_count' -OpenBrowser"
 ```
+
+### Windows Double-Click Update
+
+Kalau user tidak ingin buka PowerShell atau mengetik command panjang, ada 2 cara:
+
+1. Kalau repo sudah terinstall di `C:\NiceCount`, cukup double click:
+
+```text
+C:\NiceCount\scripts\windows\update_windows.bat
+```
+
+Wrapper ini sekarang otomatis:
+- memakai repo/folder saat ini (`-UseCurrentDirectory`)
+- menjalankan update
+- membuka browser setelah selesai
+
+2. Kalau ingin file launcher terpisah yang bisa disimpan di desktop, pakai:
+
+```text
+scripts\windows\NiceCount_Update_Launcher.bat
+```
+
+Launcher ini akan:
+- download `update_windows.ps1` terbaru dari GitHub
+- menjalankan update ke `C:\NiceCount`
+- memakai default PostgreSQL `postgres/postgres`
+
+Kalau password PostgreSQL atau folder install berbeda, edit file BAT itu dulu sebelum dipakai.
 
 Kalau mau password PostgreSQL yang berbeda:
 
