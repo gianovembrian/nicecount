@@ -11,6 +11,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const statusText = document.getElementById("analysisStatusText");
   const progressBar = document.getElementById("analysisProgressBar");
   const progressText = document.getElementById("analysisProgressText");
+  const analysisEstimatedTimeText = document.getElementById("analysisEstimatedTimeText");
+  const analysisProcessingTimeText = document.getElementById("analysisProcessingTimeText");
   const videoShell = document.getElementById("analysisVideoShell");
   const playbackShell = document.getElementById("analysisPlaybackShell");
   const livePreview = document.getElementById("analysisLivePreview");
@@ -60,6 +62,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     selectedLineOrder: null,
     lastAnalysisPayload: null,
     pendingSeekSeconds: null,
+    statusClockHandle: null,
   };
 
   const PICKER_ICONS = {
@@ -435,6 +438,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
+  function stopStatusClock() {
+    if (state.statusClockHandle) {
+      window.clearInterval(state.statusClockHandle);
+      state.statusClockHandle = null;
+    }
+  }
+
   function setPreviewMode(badgeClass, text, hint) {
     previewMode.className = `badge ${badgeClass}`;
     previewMode.textContent = text;
@@ -496,6 +506,116 @@ document.addEventListener("DOMContentLoaded", async () => {
     const safeValue = Math.max(0, Math.min(100, Number(value) || 0));
     progressBar.style.width = `${safeValue}%`;
     progressText.textContent = `${safeValue.toFixed(1)}%`;
+  }
+
+  function formatClockDuration(totalSeconds) {
+    const safeSeconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+    const hours = Math.floor(safeSeconds / 3600);
+    const minutes = Math.floor((safeSeconds % 3600) / 60);
+    const seconds = safeSeconds % 60;
+    return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
+  }
+
+  function formatEstimate(totalSeconds) {
+    const safeSeconds = Math.max(0, Math.round(Number(totalSeconds) || 0));
+    if (!safeSeconds) {
+      return "Estimating...";
+    }
+    if (safeSeconds < 60) {
+      return `${safeSeconds} sec`;
+    }
+    const hours = Math.floor(safeSeconds / 3600);
+    const minutes = Math.floor((safeSeconds % 3600) / 60);
+    const seconds = safeSeconds % 60;
+    if (hours > 0) {
+      return `${hours} hr ${String(minutes).padStart(2, "0")} min`;
+    }
+    if (minutes > 0 && seconds === 0) {
+      return `${minutes} min`;
+    }
+    return `${minutes} min ${String(seconds).padStart(2, "0")} sec`;
+  }
+
+  function calculateProcessingMetrics(payload) {
+    const job = payload && payload.job ? payload.job : null;
+    if (!job) {
+      return {
+        elapsedSeconds: 0,
+        estimatedRemainingSeconds: null,
+      };
+    }
+
+    const startedAtValue = job.started_at ? new Date(job.started_at).getTime() : null;
+    const nowMs = Date.now();
+    const elapsedSeconds = startedAtValue && !Number.isNaN(startedAtValue)
+      ? Math.max(0, (nowMs - startedAtValue) / 1000)
+      : 0;
+
+    const performance = job.summary_json && job.summary_json.performance ? job.summary_json.performance : {};
+    const processingFps = Number(performance.processing_fps || 0);
+    const processedFrames = Number(job.processed_frames || 0);
+    const totalFrames = Number(job.total_frames || 0);
+    let estimatedRemainingSeconds = null;
+
+    if (processingFps > 0 && totalFrames > 0 && processedFrames >= 0) {
+      const remainingFrames = Math.max(totalFrames - processedFrames, 0);
+      estimatedRemainingSeconds = remainingFrames / processingFps;
+    } else {
+      const progressPercent = Number(payload.progress_percent || 0);
+      if (elapsedSeconds > 0 && progressPercent > 0 && progressPercent < 100) {
+        const estimatedTotalSeconds = elapsedSeconds / (progressPercent / 100);
+        estimatedRemainingSeconds = Math.max(estimatedTotalSeconds - elapsedSeconds, 0);
+      }
+    }
+
+    return {
+      elapsedSeconds,
+      estimatedRemainingSeconds,
+    };
+  }
+
+  function renderProcessingMeta() {
+    const payload = state.lastAnalysisPayload;
+    const job = payload && payload.job ? payload.job : null;
+    const isRunning = job && ["queued", "processing"].includes(job.status) && !isStaleRunningJob(job);
+    const isConverting = payload && payload.video && payload.video.status === "converting";
+
+    if (isConverting) {
+      analysisEstimatedTimeText.textContent = "Waiting for MP4 conversion";
+      analysisProcessingTimeText.textContent = "00:00:00";
+      return;
+    }
+
+    if (!isRunning) {
+      analysisEstimatedTimeText.textContent = job && job.status === "completed" ? "Completed" : "-";
+      if (job && job.started_at && job.finished_at) {
+        const startedMs = new Date(job.started_at).getTime();
+        const finishedMs = new Date(job.finished_at).getTime();
+        const elapsedSeconds = (!Number.isNaN(startedMs) && !Number.isNaN(finishedMs))
+          ? Math.max(0, (finishedMs - startedMs) / 1000)
+          : 0;
+        analysisProcessingTimeText.textContent = formatClockDuration(elapsedSeconds);
+      } else {
+        analysisProcessingTimeText.textContent = "00:00:00";
+      }
+      stopStatusClock();
+      return;
+    }
+
+    const metrics = calculateProcessingMetrics(payload);
+    analysisEstimatedTimeText.textContent = metrics.estimatedRemainingSeconds === null
+      ? "Estimating..."
+      : formatEstimate(metrics.estimatedRemainingSeconds);
+    analysisProcessingTimeText.textContent = formatClockDuration(metrics.elapsedSeconds);
+  }
+
+  function ensureStatusClock() {
+    stopStatusClock();
+    const payload = state.lastAnalysisPayload;
+    const job = payload && payload.job ? payload.job : null;
+    if (job && ["queued", "processing"].includes(job.status) && !isStaleRunningJob(job)) {
+      state.statusClockHandle = window.setInterval(renderProcessingMeta, 1000);
+    }
   }
 
   function isStaleRunningJob(job) {
@@ -1010,6 +1130,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       <span class="soft-note">Video status: ${app.escapeHtml(video.status)}</span>
     `;
     setProgress(payload.progress_percent || 0);
+    renderProcessingMeta();
+    ensureStatusClock();
 
     if (job && job.error_message) {
       app.setAlert(alertBox, "danger", job.error_message);
@@ -1036,22 +1158,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         "Converting",
         "The uploaded file is being converted to MP4 in the background. Playback and analysis will become available automatically when conversion finishes."
       );
-    } else if (isRunning && !isStaleRunning && payload.analysis_frame_url) {
-      if (playbackUrl && state.currentPlaybackUrl !== playbackUrl) {
-        videoPlayer.src = playbackUrl;
-        state.currentPlaybackUrl = playbackUrl;
-        videoPlayer.load();
-      }
-
-      if (!state.hasLiveFrame) {
-        showPlaybackShell();
-        resetOverlayState();
-      }
-
-      const liveHint = jobStatus === "queued"
-        ? "The model is being prepared. The live preview will appear as soon as the first frame is processed."
-        : "Analysis is running. A snapshot preview is shown for now. When processing finishes, the video will play normally with synchronized overlay boxes.";
-      showLivePreview(payload.analysis_frame_url, liveHint, jobStatus === "queued" ? "Preparing Live Preview" : "Live Detection");
+    } else if (isRunning && !isStaleRunning) {
+      stopLivePreview();
+      await showPlayback({
+        videoUrl: playbackUrl,
+        overlayUrl: null,
+        hint: jobStatus === "queued"
+          ? "The analysis worker is preparing the model. You can still play the video now. Overlay markers will appear only after analysis completes."
+          : "Analysis is running in the background. The video can still be played normally now. Overlay markers will appear only after analysis completes.",
+        badgeText: jobStatus === "queued" ? "Preparing Analysis" : "Playback During Analysis",
+      });
     } else {
       const playbackHint = isStaleRunning
         ? "The previous analysis job is no longer active. Click Start Analysis to run it again."
@@ -1121,8 +1237,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       setButtonLabel(openVideoButton, "Manage Videos");
       setAnalysisActionButton({ mode: "start", disabled: false });
       setRefreshButtonLoading(false);
+      analysisEstimatedTimeText.textContent = "-";
+      analysisProcessingTimeText.textContent = "00:00:00";
       setCountLinesButton.href = "/count-lines";
       setButtonDisabled(clearAnalysisLogsButton, true);
+      stopStatusClock();
       stopLivePreview();
       resetOverlayState();
       videoPlayer.removeAttribute("src");
@@ -1314,6 +1433,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   window.addEventListener("beforeunload", () => {
     stopPolling();
+    stopStatusClock();
     stopLivePreview();
     resetOverlayState();
   });

@@ -907,6 +907,31 @@
     outline: none;
 }
 
+.analysis-status-extra {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.analysis-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.analysis-status-label {
+    color: #7e8299;
+    font-size: 0.92rem;
+}
+
+.analysis-status-value {
+    color: #181c32;
+    font-size: 0.95rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
 .analysis-table td,
 .analysis-table th,
 .analysis-picker-table td,

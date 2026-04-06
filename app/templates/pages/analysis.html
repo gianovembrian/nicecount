@@ -27,6 +27,16 @@
             <div id="analysisProgressBar" class="progress-bar bg-primary" style="width: 0%"></div>
           </div>
           <div id="analysisProgressText" class="soft-note mt-3">0%</div>
+          <div class="analysis-status-extra mt-4">
+            <div class="analysis-status-row">
+              <span class="analysis-status-label">Estimating time</span>
+              <span id="analysisEstimatedTimeText" class="analysis-status-value">-</span>
+            </div>
+            <div class="analysis-status-row">
+              <span class="analysis-status-label">Time processing</span>
+              <span id="analysisProcessingTimeText" class="analysis-status-value">00:00:00</span>
+            </div>
+          </div>
         </div>
         <div class="analysis-action-group">
           <button id="startAnalysisButton" class="btn btn-primary" type="button">
@@ -94,7 +104,7 @@
             <span id="analysisPreviewMode" class="badge badge-light">Idle</span>
           </div>
           <div id="analysisVideoDescription" class="soft-note">Select a video from the list.</div>
-          <div id="analysisPreviewHint" class="soft-note mt-3">While analysis is running, this area will show a live preview with detection boxes.</div>
+          <div id="analysisPreviewHint" class="soft-note mt-3">During analysis, this player stays as normal video playback. Overlay markers appear only after processing finishes.</div>
         </div>
       </div>
     </div>
