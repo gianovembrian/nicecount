@@ -64,6 +64,71 @@ class DetectionSettingsUpdate(BaseModel):
     vehicle_min_confidence: float = Field(ge=0.0, le=1.0)
 
 
+class GpuAuditRuntimeRead(BaseModel):
+    platform_system: str
+    platform_release: str
+    platform_version: str
+    machine: str
+    processor: str
+    python_version: str
+    torch_version: Optional[str] = None
+    ultralytics_version: Optional[str] = None
+    cuda_built_version: Optional[str] = None
+    cuda_available: bool = False
+    cuda_device_count: int = 0
+    cuda_devices: list[str] = Field(default_factory=list)
+    mps_built: bool = False
+    mps_available: bool = False
+    nvidia_smi_available: bool = False
+    nvidia_smi_summary: Optional[str] = None
+    ffmpeg_available: bool = False
+    torch_runtime_error: Optional[str] = None
+
+
+class GpuAuditConfigRead(BaseModel):
+    default_inference_device: str
+    default_model_path: str
+    target_analysis_fps: float
+    preview_fps: float
+    inference_imgsz: int
+    working_max_width: int
+    save_annotated_video: bool
+
+
+class GpuAuditChecklistItemRead(BaseModel):
+    key: str
+    title: str
+    status: str
+    summary: str
+    detail: Optional[str] = None
+
+
+class GpuAuditRecentJobRead(BaseModel):
+    video_name: str
+    status: str
+    model_name: Optional[str] = None
+    device: Optional[str] = None
+    processing_fps: Optional[float] = None
+    effective_analysis_fps: Optional[float] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class GpuAuditCommandRead(BaseModel):
+    label: str
+    command: str
+
+
+class GpuAuditRead(BaseModel):
+    overall_status: str
+    host_note: Optional[str] = None
+    runtime: GpuAuditRuntimeRead
+    config: GpuAuditConfigRead
+    checklist: list[GpuAuditChecklistItemRead] = Field(default_factory=list)
+    recent_jobs: list[GpuAuditRecentJobRead] = Field(default_factory=list)
+    commands: list[GpuAuditCommandRead] = Field(default_factory=list)
+
+
 class MasterClassRead(ORMModel):
     code: str
     label: str

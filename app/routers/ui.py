@@ -123,6 +123,23 @@ def master_classes_page(request: Request, user: Optional[User] = Depends(get_cur
     )
 
 
+@router.get("/settings/gpu-audit")
+def gpu_audit_page(request: Request, user: Optional[User] = Depends(get_current_user_optional)):
+    redirect = _require_user(user)
+    if redirect:
+        return redirect
+    if not user.is_admin:
+        return RedirectResponse(url="/videos", status_code=302)
+    return _render_page(
+        request,
+        "pages/gpu_audit.html",
+        user,
+        page_title="GPU Audit",
+        page_subtitle="Audit whether the current server is really using NVIDIA CUDA, Apple MPS, or falling back to CPU.",
+        active_nav="settings-gpu-audit",
+    )
+
+
 @router.get("/videos")
 def videos_page(request: Request, user: Optional[User] = Depends(get_current_user_optional)):
     redirect = _require_user(user)

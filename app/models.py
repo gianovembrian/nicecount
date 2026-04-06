@@ -128,6 +128,7 @@ class VideoUpload(TimestampMixin, Base):
     )
     vehicle_events: Mapped[list["VehicleEvent"]] = relationship(
         back_populates="video_upload",
+        cascade="all, delete-orphan",
         order_by="VehicleEvent.sequence_no",
     )
     count_lines: Mapped[list["VideoCountLine"]] = relationship(
@@ -135,9 +136,13 @@ class VideoUpload(TimestampMixin, Base):
         cascade="all, delete-orphan",
         order_by="VideoCountLine.line_order",
     )
-    count_aggregates: Mapped[list["VideoCountAggregate"]] = relationship(back_populates="video_upload")
+    count_aggregates: Mapped[list["VideoCountAggregate"]] = relationship(
+        back_populates="video_upload",
+        cascade="all, delete-orphan",
+    )
     golongan_totals: Mapped[list["AnalysisGolonganTotal"]] = relationship(
         back_populates="video_upload",
+        cascade="all, delete-orphan",
         order_by="AnalysisGolonganTotal.golongan_code",
     )
 
@@ -187,10 +192,17 @@ class AnalysisJob(TimestampMixin, Base):
     error_message: Mapped[Optional[str]] = mapped_column(Text)
 
     video_upload: Mapped["VideoUpload"] = relationship(back_populates="analysis_job")
-    vehicle_events: Mapped[list["VehicleEvent"]] = relationship(back_populates="analysis_job")
-    count_aggregates: Mapped[list["VideoCountAggregate"]] = relationship(back_populates="analysis_job")
+    vehicle_events: Mapped[list["VehicleEvent"]] = relationship(
+        back_populates="analysis_job",
+        cascade="all, delete-orphan",
+    )
+    count_aggregates: Mapped[list["VideoCountAggregate"]] = relationship(
+        back_populates="analysis_job",
+        cascade="all, delete-orphan",
+    )
     golongan_totals: Mapped[list["AnalysisGolonganTotal"]] = relationship(
         back_populates="analysis_job",
+        cascade="all, delete-orphan",
         order_by="AnalysisGolonganTotal.golongan_code",
     )
 

@@ -17,6 +17,7 @@ from app.constants import (
     JOB_STATUS_PENDING,
     JOB_STATUS_PROCESSING,
     JOB_STATUS_QUEUED,
+    VIDEO_STATUS_CONVERTING,
     VIDEO_STATUS_PROCESSING,
     VIDEO_STATUS_PROCESSED,
     VIDEO_STATUS_UPLOADED,
@@ -45,7 +46,7 @@ from app.schemas import (
     VideoUpdate,
     VideoUploadRead,
 )
-from app.services.analysis import build_process_config, launch_analysis_worker
+from app.services.analysis import build_process_config, launch_analysis_worker, request_analysis_stop
 from app.services.detection_settings import build_detection_settings_overrides
 from app.services.live_preview import delete_preview_artifacts, get_latest_preview_frame, preview_stream, start_preview
 from app.services.master_classes import get_or_create_master_classes
@@ -61,6 +62,12 @@ from app.services.storage import (
     thumbnail_relative_path_for,
 )
 from app.services.video_metadata import probe_video
+from app.services.video_conversion import (
+    is_video_conversion_ready,
+    launch_video_conversion_worker,
+    playback_absolute_path_for,
+    requires_video_conversion,
+)
 
 
 router = APIRouter(prefix="/api/videos", tags=["videos"])
@@ -256,11 +263,34 @@ def _ensure_video_thumbnail(video: VideoUpload) -> None:
     generate_video_thumbnail(video_absolute_path, video.stored_filename)
 
 
+def _ensure_video_conversion_state(video: VideoUpload, *, auto_process: bool = False, force: bool = False) -> bool:
+    if not requires_video_conversion(video.stored_filename, video.mime_type):
+        return False
+
+    if is_video_conversion_ready(video):
+        if video.status == VIDEO_STATUS_CONVERTING:
+            video.status = VIDEO_STATUS_UPLOADED
+            video.processing_error = None
+            return True
+        return False
+
+    if not force and video.status not in {VIDEO_STATUS_CONVERTING, VIDEO_STATUS_UPLOADED}:
+        return False
+
+    if video.status != VIDEO_STATUS_CONVERTING:
+        video.status = VIDEO_STATUS_CONVERTING
+        video.processing_error = None
+        launch_video_conversion_worker(video.id, auto_process=auto_process)
+        return True
+
+    launch_video_conversion_worker(video.id, auto_process=auto_process)
+    return False
+
+
 def _resolve_playback_file(video: VideoUpload) -> tuple[str, str]:
     settings = get_settings()
     original_absolute_path = settings.storage_root / video.relative_path
-    playback_relative_path = playback_relative_path_for(video.stored_filename)
-    playback_absolute_path = settings.storage_root / playback_relative_path
+    playback_absolute_path = playback_absolute_path_for(video)
     if playback_absolute_path.exists():
         return str(playback_absolute_path), "video/mp4"
 
@@ -274,6 +304,10 @@ def _resolve_playback_file(video: VideoUpload) -> tuple[str, str]:
         if playback_absolute_path.exists():
             return str(playback_absolute_path), "video/mp4"
     return str(original_absolute_path), video.mime_type or "application/octet-stream"
+
+
+def _playback_endpoint_url(video_id: UUID) -> str:
+    return f"/api/videos/{video_id}/playback"
 
 
 def _is_stale_running_job(job: Optional[AnalysisJob]) -> bool:
@@ -335,7 +369,7 @@ def _build_analysis_response(video: VideoUpload, db: Session) -> VideoAnalysisRe
 
     return VideoAnalysisRead(
         video=VideoUploadRead.model_validate(video),
-        video_url=build_storage_url(video.relative_path) or "",
+        video_url=_playback_endpoint_url(video.id),
         annotated_video_url=build_storage_url(video.analysis_job.annotated_relative_path) if video.analysis_job else None,
         analysis_overlay_url=overlay_url,
         analysis_stream_url=(
@@ -363,6 +397,7 @@ def list_videos(_: User = Depends(get_current_user), db: Session = Depends(get_d
     has_updates = False
     for video in videos:
         has_updates = _normalize_video_storage_filename(video) or has_updates
+        has_updates = _ensure_video_conversion_state(video) or has_updates
         _ensure_video_thumbnail(video)
     if has_updates:
         db.commit()
@@ -382,6 +417,7 @@ def upload_video(
     saved_file = save_upload_file(file)
     generate_video_thumbnail(saved_file.absolute_path, saved_file.stored_filename)
     metadata = probe_video(saved_file.absolute_path)
+    requires_conversion = requires_video_conversion(saved_file.stored_filename, saved_file.mime_type)
 
     video = VideoUpload(
         site_id=site.id,
@@ -393,7 +429,7 @@ def upload_video(
         file_size_bytes=saved_file.file_size_bytes,
         recorded_at=recorded_at,
         uploaded_by=current_user.username,
-        status=VIDEO_STATUS_UPLOADED,
+        status=VIDEO_STATUS_CONVERTING if requires_conversion else VIDEO_STATUS_UPLOADED,
         **metadata,
     )
     db.add(video)
@@ -409,8 +445,11 @@ def upload_video(
     db.add(job)
     db.commit()
 
+    if requires_conversion:
+        launch_video_conversion_worker(video.id, auto_process=auto_process)
+
     created_video = db.scalar(_video_query().where(VideoUpload.id == video.id))
-    if auto_process and created_video and created_video.analysis_job:
+    if auto_process and created_video and created_video.analysis_job and not requires_conversion:
         created_video.analysis_job.status = JOB_STATUS_QUEUED
         created_video.analysis_job.started_at = None
         created_video.analysis_job.finished_at = None
@@ -432,7 +471,9 @@ def get_video(video_id: UUID, _: User = Depends(get_current_user), db: Session =
     video = db.scalar(_video_query().where(VideoUpload.id == video_id))
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
-    if _normalize_video_storage_filename(video):
+    has_updates = _normalize_video_storage_filename(video)
+    has_updates = _ensure_video_conversion_state(video) or has_updates
+    if has_updates:
         db.commit()
     _ensure_video_thumbnail(video)
     return video
@@ -465,8 +506,13 @@ def get_video_playback(
     video = db.scalar(_video_query().where(VideoUpload.id == video_id))
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
-    if _normalize_video_storage_filename(video):
+    has_updates = _normalize_video_storage_filename(video)
+    has_updates = _ensure_video_conversion_state(video, force=True) or has_updates
+    if has_updates:
         db.commit()
+        db.refresh(video)
+    if requires_video_conversion(video.stored_filename, video.mime_type) and not is_video_conversion_ready(video):
+        raise HTTPException(status_code=409, detail="Video conversion is still running. Please wait until the MP4 playback file is ready.")
     absolute_path, media_type = _resolve_playback_file(video)
     return FileResponse(absolute_path, media_type=media_type)
 
@@ -586,6 +632,17 @@ def start_analysis(
         db.commit()
         db.refresh(video)
 
+    conversion_state_updated = _ensure_video_conversion_state(video, auto_process=True, force=True)
+    if conversion_state_updated:
+        db.commit()
+        db.refresh(video)
+
+    if requires_video_conversion(video.stored_filename, video.mime_type) and not is_video_conversion_ready(video):
+        raise HTTPException(
+            status_code=409,
+            detail="Video conversion is still running. Please wait until the MP4 playback file is ready before starting analysis.",
+        )
+
     job = video.analysis_job
     if job.status in {JOB_STATUS_PROCESSING, JOB_STATUS_QUEUED}:
         if not _is_stale_running_job(job):
@@ -617,6 +674,33 @@ def start_analysis(
     return job
 
 
+@router.post("/{video_id}/analysis/stop", response_model=AnalysisJobRead)
+def stop_analysis(
+    video_id: UUID,
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AnalysisJob:
+    video = db.scalar(_video_query().where(VideoUpload.id == video_id))
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    job = video.analysis_job
+    if not job or job.status not in {JOB_STATUS_PROCESSING, JOB_STATUS_QUEUED}:
+        raise HTTPException(status_code=409, detail="Analysis is not currently running")
+
+    if _is_stale_running_job(job):
+        _reset_analysis_results(video, db)
+        if video.analysis_job:
+            video.analysis_job.finished_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(job)
+        return job
+
+    request_analysis_stop(job.id)
+    db.refresh(job)
+    return job
+
+
 @router.post("/{video_id}/analysis/clear", status_code=status.HTTP_204_NO_CONTENT)
 def clear_analysis_logs(
     video_id: UUID,
@@ -644,7 +728,9 @@ def get_analysis(
     video = db.scalar(_video_query().where(VideoUpload.id == video_id))
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
-    if _normalize_video_storage_filename(video):
+    has_updates = _normalize_video_storage_filename(video)
+    has_updates = _ensure_video_conversion_state(video) or has_updates
+    if has_updates:
         db.commit()
     _ensure_video_thumbnail(video)
     return _build_analysis_response(video, db)

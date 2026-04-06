@@ -30,7 +30,7 @@
         </div>
         <div class="analysis-action-group">
           <button id="startAnalysisButton" class="btn btn-primary" type="button">
-            <span class="app-inline-icon" aria-hidden="true">
+            <span class="app-inline-icon" aria-hidden="true" data-button-icon>
               <svg viewBox="0 0 24 24" fill="none">
                 <path d="m9 7 8 5-8 5V7Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
               </svg>
@@ -44,7 +44,7 @@
                 <path d="M20 5v5h-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </span>
-            <span data-button-label>Refresh</span>
+            <span data-button-label>Reload Status</span>
           </button>
           <a id="setCountLinesButton" class="btn btn-light-warning" href="/count-lines">
             <span class="app-inline-icon" aria-hidden="true">
@@ -226,6 +226,7 @@
             <label class="form-label fw-semibold">Status Filter</label>
             <select id="analysisVideoStatusFilter" class="form-select form-select-solid">
               <option value="all">All Statuses</option>
+              <option value="converting">Converting</option>
               <option value="uploaded">Uploaded</option>
               <option value="processing">Processing</option>
               <option value="processed">Processed</option>

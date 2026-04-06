@@ -27,6 +27,7 @@ from app.constants import (
     GOLONGAN_V,
     JOB_STATUS_COMPLETED,
     JOB_STATUS_FAILED,
+    JOB_STATUS_PENDING,
     JOB_STATUS_PROCESSING,
     TRACKABLE_CLASS_IDS,
     VEHICLE_CLASS_BUS,
@@ -36,12 +37,14 @@ from app.constants import (
     VIDEO_STATUS_FAILED,
     VIDEO_STATUS_PROCESSING,
     VIDEO_STATUS_PROCESSED,
+    VIDEO_STATUS_UPLOADED,
 )
 from app.database import SessionLocal
 from app.models import AnalysisGolonganTotal, AnalysisJob, CountLine, Site, VehicleEvent, VideoCountAggregate, VideoCountLine, VideoUpload
-from app.services.live_preview import clear_preview, finish_preview, publish_preview_frame, start_preview
+from app.services.live_preview import clear_preview, delete_preview_artifacts, finish_preview, publish_preview_frame, start_preview
 from app.services.master_classes import build_master_class_lookup, get_or_create_master_classes
-from app.services.storage import ensure_storage_layout
+from app.services.storage import delete_relative_file, ensure_storage_layout
+from app.services.video_conversion import resolve_analysis_video_path
 
 CLASS_MIN_AREA_RATIO = {
     VEHICLE_CLASS_MOTORCYCLE: 0.00002,
@@ -49,6 +52,28 @@ CLASS_MIN_AREA_RATIO = {
     VEHICLE_CLASS_BUS: 0.0003,
     VEHICLE_CLASS_TRUCK: 0.00035,
 }
+
+TRACK_BBOX_SMOOTHING_ALPHA = 0.68
+TRACK_CONFIDENCE_SMOOTHING_ALPHA = 0.65
+TRACK_SCORE_DECAY = 0.92
+TRACK_SCORE_FLOOR = 0.02
+TRACK_STATE_RESET_GAP_FRAMES = 90
+
+_STOP_EVENTS: dict[UUID, threading.Event] = {}
+_STOP_EVENTS_LOCK = threading.Lock()
+
+
+class AnalysisStopRequested(Exception):
+    pass
+
+
+@dataclass
+class TrackState:
+    bbox: tuple[float, float, float, float]
+    confidence: float
+    last_seen_frame: int
+    class_scores: dict[str, float]
+    label_scores: dict[str, float]
 
 
 @dataclass
@@ -70,23 +95,100 @@ class ProcessConfig:
     save_annotated_video: bool
 
 
+def _get_stop_event(job_id: UUID, create: bool = False) -> Optional[threading.Event]:
+    with _STOP_EVENTS_LOCK:
+        event = _STOP_EVENTS.get(job_id)
+        if event or not create:
+            return event
+        event = threading.Event()
+        _STOP_EVENTS[job_id] = event
+        return event
+
+
+def request_analysis_stop(job_id: UUID) -> None:
+    _get_stop_event(job_id, create=True).set()
+
+
+def clear_analysis_stop(job_id: UUID) -> None:
+    with _STOP_EVENTS_LOCK:
+        _STOP_EVENTS.pop(job_id, None)
+
+
+def is_analysis_stop_requested(job_id: UUID) -> bool:
+    event = _get_stop_event(job_id, create=False)
+    return bool(event and event.is_set())
+
+
+def _raise_if_stop_requested(job_id: UUID) -> None:
+    if is_analysis_stop_requested(job_id):
+        raise AnalysisStopRequested("Analysis stopped by user")
+
+
+def _cleanup_stopped_analysis(db, video_id: UUID, job_id: UUID) -> None:
+    video = db.get(VideoUpload, video_id)
+    job = db.get(AnalysisJob, job_id)
+    if not video or not job:
+        return
+
+    db.execute(delete(VehicleEvent).where(VehicleEvent.video_upload_id == video.id))
+    db.execute(delete(AnalysisGolonganTotal).where(AnalysisGolonganTotal.video_upload_id == video.id))
+    db.execute(delete(VideoCountAggregate).where(VideoCountAggregate.video_upload_id == video.id))
+
+    delete_relative_file(job.annotated_relative_path)
+    delete_relative_file(job.report_relative_path)
+    delete_relative_file(f"reports/{job.id}.overlay.json")
+    delete_preview_artifacts(job.id)
+
+    job.status = JOB_STATUS_PENDING
+    job.summary_json = None
+    job.annotated_relative_path = None
+    job.report_relative_path = None
+    job.total_frames = None
+    job.processed_frames = None
+    job.finished_at = _utc_now()
+    job.error_message = None
+
+    video.status = VIDEO_STATUS_UPLOADED
+    video.processing_error = None
+    db.commit()
+
+
 def build_process_config(overrides: Optional[dict] = None) -> ProcessConfig:
     settings = get_settings()
     overrides = overrides or {}
-    return ProcessConfig(
-        model_path=overrides.get("model_path") or settings.default_model_path,
-        tracker_config=overrides.get("tracker_config") or settings.default_tracker_config,
-        frame_stride=max(int(overrides.get("frame_stride") or settings.default_frame_stride), 1),
-        target_analysis_fps=float(
+    configured_model_path = str(overrides.get("model_path") or settings.default_model_path).strip() or "yolov8s.pt"
+    if configured_model_path == "yolov8n.pt":
+        configured_model_path = "yolov8s.pt"
+    target_analysis_fps = max(
+        float(
             overrides.get("target_analysis_fps")
             if overrides.get("target_analysis_fps") is not None
             else settings.default_target_analysis_fps
         ),
-        preview_fps=float(
+        10.0,
+    )
+    preview_fps = max(
+        float(
             overrides.get("preview_fps")
             if overrides.get("preview_fps") is not None
             else settings.default_preview_fps
         ),
+        6.0,
+    )
+    inference_imgsz = max(
+        int(
+            overrides.get("inference_imgsz")
+            if overrides.get("inference_imgsz") is not None
+            else settings.default_inference_imgsz
+        ),
+        1152,
+    )
+    return ProcessConfig(
+        model_path=configured_model_path,
+        tracker_config=overrides.get("tracker_config") or settings.default_tracker_config,
+        frame_stride=max(int(overrides.get("frame_stride") or settings.default_frame_stride), 1),
+        target_analysis_fps=target_analysis_fps,
+        preview_fps=preview_fps,
         working_max_width=max(
             int(
                 overrides.get("working_max_width")
@@ -114,14 +216,7 @@ def build_process_config(overrides: Optional[dict] = None) -> ProcessConfig:
             ),
             95,
         ),
-        inference_imgsz=max(
-            int(
-                overrides.get("inference_imgsz")
-                if overrides.get("inference_imgsz") is not None
-                else settings.default_inference_imgsz
-            ),
-            320,
-        ),
+        inference_imgsz=inference_imgsz,
         inference_device=str(
             overrides.get("inference_device")
             if overrides.get("inference_device") is not None
@@ -157,6 +252,7 @@ def build_process_config(overrides: Optional[dict] = None) -> ProcessConfig:
 
 
 def launch_analysis_worker(video_id: UUID, job_id: UUID, overrides: Optional[dict] = None) -> None:
+    clear_analysis_stop(job_id)
     worker = threading.Thread(
         target=run_video_analysis,
         args=(video_id, job_id, overrides),
@@ -170,6 +266,7 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
     db = SessionLocal()
     capture = None
     writer = None
+    stop_requested = False
 
     try:
         start_preview(job_id)
@@ -192,6 +289,7 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
         job = db.get(AnalysisJob, job_id)
         if not video or not job:
             return
+        _raise_if_stop_requested(job_id)
 
         site = db.get(Site, video.site_id)
         if not site:
@@ -208,6 +306,7 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
         config = build_process_config(overrides or job.config_json or {})
         settings = get_settings()
         ensure_storage_layout()
+        _raise_if_stop_requested(job_id)
 
         job.status = JOB_STATUS_PROCESSING
         job.started_at = _utc_now()
@@ -255,10 +354,11 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
             totals_map[golongan_code] = total_row
         db.commit()
 
-        absolute_video_path = settings.storage_root / video.relative_path
+        absolute_video_path = resolve_analysis_video_path(video)
         capture = cv2.VideoCapture(str(absolute_video_path))
         if not capture.isOpened():
             raise RuntimeError(f"Failed to open video: {absolute_video_path}")
+        _raise_if_stop_requested(job_id)
 
         fps = float(capture.get(cv2.CAP_PROP_FPS) or 0.0) or float(video.video_fps or 0.0) or 25.0
         source_width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0) or int(video.frame_width or 0)
@@ -296,6 +396,7 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
         except Exception:
             inference_device = "cpu"
             model.to(inference_device)
+        _raise_if_stop_requested(job_id)
 
         performance_meta = {
             "source_fps": round(fps, 3),
@@ -317,6 +418,7 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
 
         track_last_points: dict[int, tuple[float, float]] = {}
         counted_track_lines: dict[int, set[int]] = {}
+        track_states: dict[int, TrackState] = {}
         frame_number = 0
         processed_frames = 0
         sequence_no = 0
@@ -325,6 +427,7 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
         started_monotonic = time.perf_counter()
 
         while True:
+            _raise_if_stop_requested(job_id)
             opened, frame = capture.read()
             if not opened:
                 break
@@ -369,23 +472,40 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
                     if not vehicle_class:
                         continue
 
-                    x1, y1, x2, y2 = [float(value) for value in xyxy]
+                    raw_bbox = tuple(float(value) for value in xyxy)
+                    x1, y1, x2, y2 = raw_bbox
                     if not _is_detection_candidate(
                         vehicle_class=vehicle_class,
                         confidence=float(confidence),
-                        bbox=(x1, y1, x2, y2),
+                        bbox=raw_bbox,
                         frame_width=max(working_width, 1),
                         frame_height=max(working_height, 1),
                         config=config,
                     ):
                         continue
 
+                    source_label = _resolve_source_label(names, class_id)
+                    stabilized = _stabilize_track_detection(
+                        track_states=track_states,
+                        track_id=int(track_id),
+                        frame_number=frame_number,
+                        vehicle_class=vehicle_class,
+                        source_label=source_label,
+                        confidence=float(confidence),
+                        bbox=raw_bbox,
+                    )
+                    stable_vehicle_class = stabilized["vehicle_class"]
+                    stable_source_label = stabilized["source_label"]
+                    stable_confidence = stabilized["confidence"]
+                    x1, y1, x2, y2 = stabilized["bbox"]
+                    stable_bbox = (x1, y1, x2, y2)
+
                     frame_detections.append(
                         {
                             "track_id": int(track_id),
-                            "vehicle_class": vehicle_class,
-                            "source_label": _resolve_source_label(names, class_id),
-                            "confidence": round(float(confidence), 4),
+                            "vehicle_class": stable_vehicle_class,
+                            "source_label": stable_source_label,
+                            "confidence": round(float(stable_confidence), 4),
                             "x1": round(x1 / max(float(working_width), 1.0), 6),
                             "y1": round(y1 / max(float(working_height), 1.0), 6),
                             "x2": round(x2 / max(float(working_width), 1.0), 6),
@@ -411,8 +531,8 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
 
                         if crossed_lines:
                             detected_label, golongan_code, golongan_label = _classify_golongan(
-                                vehicle_class=vehicle_class,
-                                bbox=(x1, y1, x2, y2),
+                                vehicle_class=stable_vehicle_class,
+                                bbox=stable_bbox,
                                 frame_width=max(working_width, 1),
                                 frame_height=max(working_height, 1),
                                 master_class_lookup=master_class_lookup,
@@ -428,17 +548,17 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
                                         site_id=site.id,
                                         sequence_no=sequence_no,
                                         track_id=int(track_id),
-                                        vehicle_class=vehicle_class,
+                                        vehicle_class=stable_vehicle_class,
                                         detected_label=detected_label,
                                         golongan_code=golongan_code,
                                         golongan_label=golongan_label,
-                                        source_label=_resolve_source_label(names, class_id),
+                                        source_label=stable_source_label,
                                         count_line_order=line_order,
                                         count_line_name=line.name,
                                         direction=direction,
                                         crossed_at_seconds=float(frame_number / fps),
                                         crossed_at_frame=frame_number,
-                                        confidence=float(confidence),
+                                        confidence=float(stable_confidence),
                                         speed_kph=None,
                                         bbox_x1=x1 * scale_x,
                                         bbox_y1=y1 * scale_y,
@@ -453,7 +573,7 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
                                     {
                                         "sequence_no": sequence_no,
                                         "track_id": int(track_id),
-                                        "vehicle_class": vehicle_class,
+                                        "vehicle_class": stable_vehicle_class,
                                         "detected_label": detected_label,
                                         "golongan_code": golongan_code,
                                         "golongan_label": golongan_label,
@@ -462,7 +582,7 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
                                         "direction": direction,
                                         "crossed_at_seconds": float(frame_number / fps),
                                         "crossed_at_frame": frame_number,
-                                        "confidence": float(confidence),
+                                        "confidence": float(stable_confidence),
                                     }
                                 )
                                 event_found = True
@@ -630,6 +750,9 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
             finish_preview(job_id)
         except OSError:
             pass
+    except AnalysisStopRequested:
+        db.rollback()
+        stop_requested = True
     except Exception as exc:
         db.rollback()
         job = db.get(AnalysisJob, job_id)
@@ -651,8 +774,15 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
             capture.release()
         if writer is not None:
             writer.release()
+        if stop_requested:
+            try:
+                finish_preview(job_id)
+            except OSError:
+                pass
+            _cleanup_stopped_analysis(db, video_id, job_id)
         db.close()
         clear_preview(job_id)
+        clear_analysis_stop(job_id)
 
 
 def _utc_now() -> datetime:
@@ -732,6 +862,77 @@ def _prepare_preview_frame(frame, max_width: int):
         return frame
 
     return cv2.resize(frame, (target_width, target_height), interpolation=cv2.INTER_AREA)
+
+
+def _decay_score_map(scores: dict[str, float]) -> dict[str, float]:
+    next_scores: dict[str, float] = {}
+    for key, value in scores.items():
+        decayed = float(value) * TRACK_SCORE_DECAY
+        if decayed >= TRACK_SCORE_FLOOR:
+            next_scores[key] = decayed
+    return next_scores
+
+
+def _pick_dominant_score(scores: dict[str, float], fallback: str) -> str:
+    if not scores:
+        return fallback
+    return max(scores.items(), key=lambda item: item[1])[0]
+
+
+def _blend_bbox(
+    previous_bbox: tuple[float, float, float, float],
+    current_bbox: tuple[float, float, float, float],
+) -> tuple[float, float, float, float]:
+    return tuple(
+        (float(previous_value) * (1.0 - TRACK_BBOX_SMOOTHING_ALPHA)) + (float(current_value) * TRACK_BBOX_SMOOTHING_ALPHA)
+        for previous_value, current_value in zip(previous_bbox, current_bbox)
+    )
+
+
+def _stabilize_track_detection(
+    track_states: dict[int, TrackState],
+    track_id: int,
+    frame_number: int,
+    vehicle_class: str,
+    source_label: str,
+    confidence: float,
+    bbox: tuple[float, float, float, float],
+) -> dict:
+    fallback_label = source_label or DETECTED_TYPE_LABELS.get(vehicle_class, vehicle_class)
+    state = track_states.get(track_id)
+
+    if state is None or (frame_number - state.last_seen_frame) > TRACK_STATE_RESET_GAP_FRAMES:
+        state = TrackState(
+            bbox=bbox,
+            confidence=float(confidence),
+            last_seen_frame=frame_number,
+            class_scores={vehicle_class: float(confidence)},
+            label_scores={fallback_label: float(confidence)},
+        )
+        track_states[track_id] = state
+        return {
+            "bbox": bbox,
+            "confidence": float(confidence),
+            "vehicle_class": vehicle_class,
+            "source_label": fallback_label,
+        }
+
+    state.class_scores = _decay_score_map(state.class_scores)
+    state.label_scores = _decay_score_map(state.label_scores)
+    state.class_scores[vehicle_class] = state.class_scores.get(vehicle_class, 0.0) + float(confidence)
+    state.label_scores[fallback_label] = state.label_scores.get(fallback_label, 0.0) + float(confidence)
+    state.bbox = _blend_bbox(state.bbox, bbox)
+    state.confidence = (state.confidence * (1.0 - TRACK_CONFIDENCE_SMOOTHING_ALPHA)) + (
+        float(confidence) * TRACK_CONFIDENCE_SMOOTHING_ALPHA
+    )
+    state.last_seen_frame = frame_number
+
+    return {
+        "bbox": state.bbox,
+        "confidence": float(state.confidence),
+        "vehicle_class": _pick_dominant_score(state.class_scores, vehicle_class),
+        "source_label": _pick_dominant_score(state.label_scores, fallback_label),
+    }
 
 
 def _point_side(line_start: tuple[float, float], line_end: tuple[float, float], point: tuple[float, float]) -> float:

@@ -25,6 +25,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const state = {
     videos: [],
+    pollHandle: null,
   };
 
   const ICONS = {
@@ -94,6 +95,34 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
+  function stopPolling() {
+    if (state.pollHandle) {
+      window.clearInterval(state.pollHandle);
+      state.pollHandle = null;
+    }
+  }
+
+  function shouldPollVideos() {
+    return state.videos.some((video) => {
+      const analysisStatus = video.analysis_job ? video.analysis_job.status : "pending";
+      return ["converting", "processing"].includes(video.status) || ["queued", "processing"].includes(analysisStatus);
+    });
+  }
+
+  function ensurePolling() {
+    stopPolling();
+    if (!shouldPollVideos()) {
+      return;
+    }
+    state.pollHandle = window.setInterval(async () => {
+      try {
+        await loadVideos();
+      } catch (error) {
+        console.error("video polling failed", error);
+      }
+    }, 2000);
+  }
+
   function setUploadSubmitting(isSubmitting) {
     if (!uploadSubmitButton) {
       return;
@@ -125,6 +154,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     return stem ? `/storage/thumbnails/${encodeURIComponent(stem)}.jpg` : "";
   }
 
+  function needsPlaybackConversion(video) {
+    const storedFilename = String(video && video.stored_filename ? video.stored_filename : "").toLowerCase();
+    return storedFilename ? !storedFilename.endsWith(".mp4") : false;
+  }
+
+  function displayPlaybackFilename(video) {
+    const storedFilename = String(video && video.stored_filename ? video.stored_filename : "");
+    if (!storedFilename) {
+      return String(video && video.original_filename ? video.original_filename : "");
+    }
+    if (!needsPlaybackConversion(video)) {
+      return storedFilename;
+    }
+    return storedFilename.replace(/\.[^.]+$/, ".mp4");
+  }
+
   function actionMenuButton({ action, id, label, toneClass, title }) {
     return `
       <button
@@ -132,6 +177,20 @@ document.addEventListener("DOMContentLoaded", async () => {
         type="button"
         data-action="${action}"
         data-id="${id}"
+        title="${app.escapeHtml(title)}"
+      >
+        ${ICONS[action]}
+        <span>${label}</span>
+      </button>
+    `;
+  }
+
+  function actionMenuButtonDisabled({ action, label, toneClass, title }) {
+    return `
+      <button
+        class="dropdown-item app-dropdown-action ${toneClass}"
+        type="button"
+        disabled
         title="${app.escapeHtml(title)}"
       >
         ${ICONS[action]}
@@ -154,6 +213,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function renderActionDropdown(video) {
+    const isConverting = video.status === "converting";
     return `
       <div class="dropdown app-actions-dropdown">
         <button
@@ -175,14 +235,24 @@ document.addEventListener("DOMContentLoaded", async () => {
             toneClass: "app-dropdown-action-warning",
             title: `Set count lines for ${video.original_filename}`,
           })}
-          ${actionMenuLink({
+          ${isConverting ? actionMenuButtonDisabled({
+            action: "analysis",
+            label: "Analyze",
+            toneClass: "app-dropdown-action-success",
+            title: `Analyze will be available after MP4 conversion finishes for ${video.original_filename}`,
+          }) : actionMenuLink({
             href: `/analysis?video_id=${video.id}`,
             icon: ICONS.analysis,
             label: "Analyze",
             toneClass: "app-dropdown-action-success",
             title: `Analyze ${video.original_filename}`,
           })}
-          ${actionMenuButton({
+          ${isConverting ? actionMenuButtonDisabled({
+            action: "preview",
+            label: "Preview",
+            toneClass: "app-dropdown-action-primary",
+            title: `Preview will be available after MP4 conversion finishes for ${video.original_filename}`,
+          }) : actionMenuButton({
             action: "preview",
             id: video.id,
             label: "Preview",
@@ -226,7 +296,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   function renderFileNameCell(video) {
     const originalName = app.escapeHtml(video.original_filename || "-");
-    const storedName = app.escapeHtml(video.stored_filename || "-");
+    const storedName = app.escapeHtml(displayPlaybackFilename(video) || "-");
     const metaLine = video.original_filename && video.original_filename !== video.stored_filename
       ? `Original: ${originalName}`
       : `${video.frame_width || "-"} x ${video.frame_height || "-"} px`;
@@ -286,10 +356,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   async function loadVideos() {
     state.videos = await app.apiFetch("/api/videos");
     renderVideos();
+    ensurePolling();
   }
 
   function openPreviewModal(video) {
-    previewVideoTitle.textContent = video.stored_filename || video.original_filename || "Video Preview";
+    previewVideoTitle.textContent = displayPlaybackFilename(video) || video.original_filename || "Video Preview";
     if (previewVideoLoading) {
       previewVideoLoading.classList.remove("hidden");
     }
@@ -388,7 +459,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     try {
       showUploadLoading();
-      await app.apiFetch("/api/videos", {
+      const createdVideo = await app.apiFetch("/api/videos", {
         method: "POST",
         body: formData,
       });
@@ -398,7 +469,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       await loadVideos();
       hideUploadLoading();
       if (uploadSuccessMessage) {
-        uploadSuccessMessage.textContent = `Video ${file.name} was uploaded successfully.`;
+        if (createdVideo && createdVideo.status === "converting") {
+          uploadSuccessMessage.textContent = formData.get("auto_process")
+            ? `Video ${file.name} was uploaded. MP4 conversion is now running, and analysis will start automatically when the MP4 file is ready.`
+            : `Video ${file.name} was uploaded. MP4 conversion is now running in the background.`;
+        } else {
+          uploadSuccessMessage.textContent = `Video ${file.name} was uploaded successfully.`;
+        }
       }
       if (uploadSuccessModal) {
         uploadSuccessModal.show();
@@ -440,5 +517,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         app.setAlert(videosAlert, "danger", error.message);
       }
     }
+  });
+
+  window.addEventListener("beforeunload", () => {
+    stopPolling();
   });
 });

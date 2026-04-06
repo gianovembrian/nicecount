@@ -71,6 +71,24 @@ document.addEventListener("DOMContentLoaded", async () => {
       </span>
     `,
   };
+  const ANALYSIS_ACTION_ICONS = {
+    start: `
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d="m9 7 8 5-8 5V7Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+      </svg>
+    `,
+    stop: `
+      <svg viewBox="0 0 24 24" fill="none">
+        <rect x="7" y="7" width="10" height="10" rx="1.8" stroke="currentColor" stroke-width="1.8"/>
+      </svg>
+    `,
+    refresh: `
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d="M20 12a8 8 0 1 1-2.34-5.66" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M20 5v5h-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `,
+  };
 
   function setButtonLabel(button, label) {
     if (!button) {
@@ -89,6 +107,48 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
     button.disabled = disabled;
+  }
+
+  function setAnalysisActionButton({ mode, disabled = false }) {
+    const iconNode = startAnalysisButton.querySelector("[data-button-icon]");
+    startAnalysisButton.classList.remove("btn-primary", "btn-danger", "btn-light-primary", "btn-light-danger");
+
+    if (mode === "stop") {
+      startAnalysisButton.classList.add("btn-danger");
+      if (iconNode) {
+        iconNode.innerHTML = ANALYSIS_ACTION_ICONS.stop;
+      }
+      setButtonLabel(startAnalysisButton, "Stop Analysis");
+    } else if (mode === "stopping") {
+      startAnalysisButton.classList.add("btn-light-danger");
+      if (iconNode) {
+        iconNode.innerHTML = ANALYSIS_ACTION_ICONS.stop;
+      }
+      setButtonLabel(startAnalysisButton, "Stopping...");
+    } else if (mode === "converting") {
+      startAnalysisButton.classList.add("btn-light-primary");
+      if (iconNode) {
+        iconNode.innerHTML = ANALYSIS_ACTION_ICONS.start;
+      }
+      setButtonLabel(startAnalysisButton, "Converting...");
+    } else {
+      startAnalysisButton.classList.add("btn-primary");
+      if (iconNode) {
+        iconNode.innerHTML = ANALYSIS_ACTION_ICONS.start;
+      }
+      setButtonLabel(startAnalysisButton, "Start Analysis");
+    }
+
+    setButtonDisabled(startAnalysisButton, disabled);
+  }
+
+  function setRefreshButtonLoading(isLoading) {
+    const iconNode = refreshAnalysisButton.querySelector(".app-inline-icon");
+    if (iconNode) {
+      iconNode.innerHTML = ANALYSIS_ACTION_ICONS.refresh;
+    }
+    setButtonLabel(refreshAnalysisButton, isLoading ? "Reloading..." : "Reload Status");
+    setButtonDisabled(refreshAnalysisButton, isLoading);
   }
 
   function formatLineDisplayName(lineOrder) {
@@ -200,6 +260,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     return state.videos.find((video) => video.id === state.selectedVideoId) || null;
   }
 
+  function needsPlaybackConversion(video) {
+    const storedFilename = String(video && video.stored_filename ? video.stored_filename : "").toLowerCase();
+    return storedFilename ? !storedFilename.endsWith(".mp4") : false;
+  }
+
+  function displayPlaybackFilename(video) {
+    const storedFilename = String(video && video.stored_filename ? video.stored_filename : "");
+    if (!storedFilename) {
+      return String(video && video.original_filename ? video.original_filename : "");
+    }
+    if (!needsPlaybackConversion(video)) {
+      return storedFilename;
+    }
+    return storedFilename.replace(/\.[^.]+$/, ".mp4");
+  }
+
   function thumbnailUrl(video) {
     const stem = String(video && video.stored_filename ? video.stored_filename : "")
       .replace(/\.[^.]+$/, "");
@@ -221,7 +297,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const recordedOrCreated = video.recorded_at
       ? `Recorded ${app.formatDateTime(video.recorded_at)}`
       : `Uploaded ${app.formatDateTime(video.created_at)}`;
-    selectedAnalysisVideoName.textContent = video.stored_filename || video.original_filename;
+    selectedAnalysisVideoName.textContent = displayPlaybackFilename(video) || video.original_filename;
     selectedAnalysisVideoMeta.textContent = `${recordedOrCreated} • Duration ${app.formatDuration(video.duration_seconds)} • By ${video.uploaded_by || "-"}`;
     selectedAnalysisVideoBadges.innerHTML = `
       <span class="badge ${app.statusBadge(video.status)} status-pill">${app.escapeHtml(video.status)}</span>
@@ -300,7 +376,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           <td class="text-gray-700 fw-semibold">${index + 1}</td>
           <td>${renderPickerThumbnail(video)}</td>
           <td>
-            <div class="app-user-primary">${app.escapeHtml(video.stored_filename || video.original_filename)}</div>
+            <div class="app-user-primary">${app.escapeHtml(displayPlaybackFilename(video) || video.original_filename)}</div>
             <div class="app-user-secondary">${app.escapeHtml(video.description || video.original_filename || "-")}</div>
           </td>
           <td>
@@ -548,28 +624,147 @@ document.addEventListener("DOMContentLoaded", async () => {
     return true;
   }
 
-  function findOverlayFrame(timeSeconds) {
+  function overlaySourceStepSeconds() {
+    const performance = state.overlayData && state.overlayData.analysis && state.overlayData.analysis.performance
+      ? state.overlayData.analysis.performance
+      : {};
+    const effectiveAnalysisFps = Number(performance.effective_analysis_fps || 0);
+    if (effectiveAnalysisFps > 0) {
+      return 1 / effectiveAnalysisFps;
+    }
+
+    const effectiveFrameStride = Number(performance.effective_frame_stride || 0);
+    const sourceFps = Number(state.overlayData && state.overlayData.source ? state.overlayData.source.fps : 0);
+    if (effectiveFrameStride > 0 && sourceFps > 0) {
+      return effectiveFrameStride / sourceFps;
+    }
+
+    return 0.16;
+  }
+
+  function overlayHoldWindowSeconds() {
+    return Math.max(overlaySourceStepSeconds() * 2.4, 0.35);
+  }
+
+  function overlayInterpolationWindowSeconds() {
+    return Math.max(overlaySourceStepSeconds() * 4.0, 0.6);
+  }
+
+  function overlayTrackKey(detection, index) {
+    if (detection && detection.track_id !== null && detection.track_id !== undefined) {
+      return `track:${detection.track_id}`;
+    }
+    return `anon:${index}`;
+  }
+
+  function lerpNumber(startValue, endValue, ratio) {
+    return Number(startValue || 0) + ((Number(endValue || 0) - Number(startValue || 0)) * ratio);
+  }
+
+  function findOverlayFrameWindow(timeSeconds) {
     const frames = state.overlayData && state.overlayData.frames ? state.overlayData.frames : [];
     if (!frames.length) {
-      return null;
+      return { previous: null, next: null };
     }
 
     let low = 0;
     let high = frames.length - 1;
-    let result = frames[0];
+    let insertionIndex = frames.length;
 
     while (low <= high) {
       const mid = Math.floor((low + high) / 2);
-      const frame = frames[mid];
-      if (Number(frame.time_seconds || 0) <= timeSeconds) {
-        result = frame;
-        low = mid + 1;
-      } else {
+      const frameTime = Number(frames[mid].time_seconds || 0);
+      if (frameTime >= timeSeconds) {
+        insertionIndex = mid;
         high = mid - 1;
+      } else {
+        low = mid + 1;
       }
     }
 
-    return result;
+    let previousIndex = insertionIndex - 1;
+    if (insertionIndex < frames.length && Number(frames[insertionIndex].time_seconds || 0) <= timeSeconds) {
+      previousIndex = insertionIndex;
+    }
+    while (previousIndex >= 0) {
+      const detections = frames[previousIndex].detections || [];
+      if (detections.length) {
+        break;
+      }
+      previousIndex -= 1;
+    }
+
+    let nextIndex = insertionIndex;
+    while (nextIndex < frames.length) {
+      const detections = frames[nextIndex].detections || [];
+      if (detections.length) {
+        break;
+      }
+      nextIndex += 1;
+    }
+
+    return {
+      previous: previousIndex >= 0 ? frames[previousIndex] : null,
+      next: nextIndex < frames.length ? frames[nextIndex] : null,
+    };
+  }
+
+  function interpolateDetections(previousFrame, nextFrame, timeSeconds) {
+    const previousDetections = previousFrame && Array.isArray(previousFrame.detections) ? previousFrame.detections : [];
+    const nextDetections = nextFrame && Array.isArray(nextFrame.detections) ? nextFrame.detections : [];
+    if (!previousDetections.length && !nextDetections.length) {
+      return [];
+    }
+
+    const previousTime = previousFrame ? Number(previousFrame.time_seconds || 0) : null;
+    const nextTime = nextFrame ? Number(nextFrame.time_seconds || 0) : null;
+    const maxGapSeconds = overlayInterpolationWindowSeconds();
+    const holdWindowSeconds = overlayHoldWindowSeconds();
+    const previousMap = new Map(previousDetections.map((detection, index) => [overlayTrackKey(detection, index), detection]));
+    const nextMap = new Map(nextDetections.map((detection, index) => [overlayTrackKey(detection, index), detection]));
+    const keys = new Set([...previousMap.keys(), ...nextMap.keys()]);
+    const mergedDetections = [];
+
+    keys.forEach((key) => {
+      const previousDetection = previousMap.get(key);
+      const nextDetection = nextMap.get(key);
+
+      if (previousDetection && nextDetection && previousTime !== null && nextTime !== null) {
+        const gapSeconds = nextTime - previousTime;
+        if (gapSeconds > 0 && gapSeconds <= maxGapSeconds) {
+          const ratio = Math.min(Math.max((timeSeconds - previousTime) / gapSeconds, 0), 1);
+          const referenceDetection = ratio < 0.5 ? previousDetection : nextDetection;
+          mergedDetections.push({
+            ...referenceDetection,
+            x1: lerpNumber(previousDetection.x1, nextDetection.x1, ratio),
+            y1: lerpNumber(previousDetection.y1, nextDetection.y1, ratio),
+            x2: lerpNumber(previousDetection.x2, nextDetection.x2, ratio),
+            y2: lerpNumber(previousDetection.y2, nextDetection.y2, ratio),
+            confidence: lerpNumber(previousDetection.confidence, nextDetection.confidence, ratio),
+          });
+          return;
+        }
+      }
+
+      if (previousDetection && previousTime !== null && (timeSeconds - previousTime) <= holdWindowSeconds) {
+        mergedDetections.push(previousDetection);
+        return;
+      }
+
+      if (nextDetection && nextTime !== null && (nextTime - timeSeconds) <= (holdWindowSeconds * 0.75)) {
+        mergedDetections.push(nextDetection);
+      }
+    });
+
+    return mergedDetections;
+  }
+
+  function sampleOverlayDetections(timeSeconds) {
+    const frameWindow = findOverlayFrameWindow(timeSeconds);
+    if (!frameWindow.previous && !frameWindow.next) {
+      return [];
+    }
+    return interpolateDetections(frameWindow.previous, frameWindow.next, timeSeconds);
   }
 
   function drawOverlayLines(canvasWidth, canvasHeight) {
@@ -594,8 +789,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  function drawOverlayBoxes(frame, canvasWidth, canvasHeight) {
-    const detections = frame && frame.detections ? frame.detections : [];
+  function drawOverlayBoxes(detections, canvasWidth, canvasHeight) {
     detections.forEach((detection) => {
       const x1 = Number(detection.x1 || 0) * canvasWidth;
       const y1 = Number(detection.y1 || 0) * canvasHeight;
@@ -633,7 +827,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const canvasHeight = overlayCanvas.height / (window.devicePixelRatio || 1);
     clearOverlayCanvas();
     drawOverlayLines(canvasWidth, canvasHeight);
-    drawOverlayBoxes(findOverlayFrame(videoPlayer.currentTime || 0), canvasWidth, canvasHeight);
+    drawOverlayBoxes(sampleOverlayDetections(videoPlayer.currentTime || 0), canvasWidth, canvasHeight);
     overlayCanvas.classList.remove("hidden");
   }
 
@@ -770,6 +964,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const video = payload.video;
     const job = payload.job;
     const playbackUrl = video ? `/api/videos/${video.id}/playback` : null;
+    const isConverting = video.status === "converting";
 
     renderSelectedVideoSummary();
     renderVideoPickerList();
@@ -800,12 +995,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
     document.getElementById("metric_total").textContent = String(totalVehicleCount);
 
-    videoTitle.textContent = video.original_filename;
+    videoTitle.textContent = displayPlaybackFilename(video) || video.original_filename;
     videoDescription.textContent = video.description || "No description";
     openVideoButton.href = payload.video_url || "/videos";
     openVideoButton.target = "_blank";
     openVideoButton.rel = "noreferrer";
-    setButtonLabel(openVideoButton, "Open Original File");
+    setButtonLabel(openVideoButton, "Open Playback Video");
 
     const jobStatus = job ? job.status : "pending";
     const isStaleRunning = isStaleRunningJob(job);
@@ -818,12 +1013,30 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (job && job.error_message) {
       app.setAlert(alertBox, "danger", job.error_message);
+    } else if (video.processing_error) {
+      app.setAlert(alertBox, "danger", video.processing_error);
     }
 
     renderEvents(visibleEvents);
 
     const isRunning = jobStatus === "processing" || jobStatus === "queued";
-    if (isRunning && !isStaleRunning && payload.analysis_frame_url) {
+    if (isConverting) {
+      stopLivePreview();
+      resetOverlayState();
+      videoPlayer.removeAttribute("src");
+      state.currentPlaybackUrl = null;
+      videoPlayer.load();
+      showPlaybackShell();
+      openVideoButton.href = "/videos";
+      openVideoButton.target = "";
+      openVideoButton.rel = "";
+      setButtonLabel(openVideoButton, "Manage Videos");
+      setPreviewMode(
+        "badge-light-info",
+        "Converting",
+        "The uploaded file is being converted to MP4 in the background. Playback and analysis will become available automatically when conversion finishes."
+      );
+    } else if (isRunning && !isStaleRunning && payload.analysis_frame_url) {
       if (playbackUrl && state.currentPlaybackUrl !== playbackUrl) {
         videoPlayer.src = playbackUrl;
         state.currentPlaybackUrl = playbackUrl;
@@ -861,11 +1074,18 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     }
 
-    startAnalysisButton.disabled = !state.selectedVideoId || (isRunning && !isStaleRunning);
-    setButtonDisabled(clearAnalysisLogsButton, !state.selectedVideoId || (isRunning && !isStaleRunning));
+    if (isConverting) {
+      setAnalysisActionButton({ mode: "converting", disabled: true });
+    } else if (isRunning && !isStaleRunning) {
+      setAnalysisActionButton({ mode: "stop", disabled: false });
+    } else {
+      setAnalysisActionButton({ mode: "start", disabled: !state.selectedVideoId });
+    }
+    setButtonDisabled(clearAnalysisLogsButton, !state.selectedVideoId || isConverting || (isRunning && !isStaleRunning));
+    setRefreshButtonLoading(false);
 
     stopPolling();
-    if (isRunning) {
+    if (isRunning || isConverting) {
       state.pollHandle = window.setInterval(loadAnalysis, 1200);
     }
   }
@@ -899,6 +1119,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       openVideoButton.target = "";
       openVideoButton.rel = "";
       setButtonLabel(openVideoButton, "Manage Videos");
+      setAnalysisActionButton({ mode: "start", disabled: false });
+      setRefreshButtonLoading(false);
       setCountLinesButton.href = "/count-lines";
       setButtonDisabled(clearAnalysisLogsButton, true);
       stopLivePreview();
@@ -1015,8 +1237,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   refreshAnalysisButton.addEventListener("click", async () => {
-    await loadVideos();
-    await loadAnalysis();
+    try {
+      app.setAlert(alertBox, "danger", "");
+      setRefreshButtonLoading(true);
+      await loadVideos();
+      await loadAnalysis();
+      app.setAlert(alertBox, "success", "Analysis status reloaded");
+    } catch (error) {
+      app.setAlert(alertBox, "danger", error.message);
+    } finally {
+      setRefreshButtonLoading(false);
+    }
   });
 
   clearAnalysisLogsButton.addEventListener("click", async () => {
@@ -1050,17 +1281,34 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
+    const currentJob = state.lastAnalysisPayload ? state.lastAnalysisPayload.job : null;
+    const isRunning = currentJob && ["queued", "processing"].includes(currentJob.status) && !isStaleRunningJob(currentJob);
+
     try {
       app.setAlert(alertBox, "danger", "");
-      await app.apiFetch(`/api/videos/${state.selectedVideoId}/analysis/start`, {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-      state.hasLiveFrame = false;
-      resetOverlayState();
+      if (isRunning) {
+        if (!window.confirm("Are you sure you want to stop the current analysis?")) {
+          return;
+        }
+        setAnalysisActionButton({ mode: "stopping", disabled: true });
+        await app.apiFetch(`/api/videos/${state.selectedVideoId}/analysis/stop`, {
+          method: "POST",
+          body: JSON.stringify({}),
+        });
+        app.setAlert(alertBox, "success", "Stop request sent. Waiting for the worker to halt.");
+      } else {
+        setAnalysisActionButton({ mode: "start", disabled: true });
+        await app.apiFetch(`/api/videos/${state.selectedVideoId}/analysis/start`, {
+          method: "POST",
+          body: JSON.stringify({}),
+        });
+        state.hasLiveFrame = false;
+        resetOverlayState();
+      }
       await loadAnalysis();
     } catch (error) {
       app.setAlert(alertBox, "danger", error.message);
+      setAnalysisActionButton({ mode: isRunning ? "stop" : "start", disabled: false });
     }
   });
 

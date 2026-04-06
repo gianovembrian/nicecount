@@ -4,6 +4,7 @@ from collections import OrderedDict
 
 
 VIDEO_STATUS_UPLOADED = "uploaded"
+VIDEO_STATUS_CONVERTING = "converting"
 VIDEO_STATUS_PROCESSING = "processing"
 VIDEO_STATUS_PROCESSED = "processed"
 VIDEO_STATUS_FAILED = "failed"
@@ -12,6 +13,7 @@ JOB_STATUS_PENDING = "pending"
 JOB_STATUS_QUEUED = "queued"
 JOB_STATUS_PROCESSING = "processing"
 JOB_STATUS_COMPLETED = "completed"
+JOB_STATUS_STOPPED = "stopped"
 JOB_STATUS_FAILED = "failed"
 
 DIRECTION_NORMAL = "normal"

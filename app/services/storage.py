@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import secrets
 import shutil
+import subprocess
 from datetime import datetime
 from dataclasses import dataclass
 from pathlib import Path
@@ -138,6 +139,90 @@ def generate_video_thumbnail(video_path: Path, stored_filename: str) -> Optional
     return relative_path
 
 
+def _resolve_ffmpeg_executable() -> Optional[str]:
+    system_ffmpeg = shutil.which("ffmpeg")
+    if system_ffmpeg:
+        return system_ffmpeg
+
+    try:
+        import imageio_ffmpeg  # type: ignore
+    except ImportError:
+        return None
+
+    try:
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
+
+
+def _ensure_browser_playback_with_ffmpeg(
+    video_path: Path,
+    output_path: Path,
+    *,
+    max_width: int = 1280,
+) -> bool:
+    ffmpeg_executable = _resolve_ffmpeg_executable()
+    if not ffmpeg_executable or not video_path.exists():
+        return False
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = output_path.with_suffix(".tmp.mp4")
+    if temp_path.exists():
+        temp_path.unlink()
+
+    command = [
+        ffmpeg_executable,
+        "-y",
+        "-i",
+        str(video_path),
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "23",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+    ]
+    if max_width > 0:
+        command.extend(
+            [
+                "-vf",
+                f"scale=if(gt(iw\\,{max_width})\\,{max_width}\\,iw):-2:flags=lanczos",
+            ]
+        )
+    command.append(str(temp_path))
+
+    try:
+        completed = subprocess.run(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    except OSError:
+        return False
+
+    if completed.returncode != 0:
+        if temp_path.exists():
+            temp_path.unlink()
+        return False
+
+    if not temp_path.exists() or temp_path.stat().st_size <= 0:
+        if temp_path.exists():
+            temp_path.unlink()
+        return False
+
+    temp_path.replace(output_path)
+    return True
+
+
 def ensure_browser_playback(video_path: Path, stored_filename: str, max_width: int = 1280) -> Optional[str]:
     settings = get_settings()
     ensure_storage_layout()
@@ -145,6 +230,11 @@ def ensure_browser_playback(video_path: Path, stored_filename: str, max_width: i
     relative_path = playback_relative_path_for(stored_filename)
     absolute_path = settings.storage_root / relative_path
     if absolute_path.exists() and absolute_path.stat().st_size > 0:
+        return relative_path
+    if not video_path.exists():
+        return None
+
+    if _ensure_browser_playback_with_ffmpeg(video_path, absolute_path, max_width=max_width):
         return relative_path
 
     try:

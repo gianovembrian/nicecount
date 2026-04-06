@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS video_uploads (
     file_size_bytes BIGINT,
     recorded_at TIMESTAMPTZ,
     uploaded_by VARCHAR(255),
-    status VARCHAR(50) NOT NULL CHECK (status IN ('uploaded', 'processing', 'processed', 'failed')),
+    status VARCHAR(50) NOT NULL CHECK (status IN ('uploaded', 'converting', 'processing', 'processed', 'failed')),
     video_fps DOUBLE PRECISION,
     frame_width INTEGER,
     frame_height INTEGER,

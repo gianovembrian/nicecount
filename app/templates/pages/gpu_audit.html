@@ -1,0 +1,127 @@
+{% extends "layouts/base.html" %}
+
+{% block content %}
+<div id="gpuAuditAlert" class="alert alert-danger hidden"></div>
+
+<div class="row g-6 mb-6" id="gpuAuditSummaryGrid">
+  <div class="col-xl-3 col-md-6">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="text-muted text-uppercase fw-semibold fs-8 mb-2">Overall Status</div>
+        <div id="gpuAuditOverallStatus" class="fs-2hx fw-bold text-gray-900">-</div>
+        <div id="gpuAuditHostNote" class="text-muted fs-7 mt-2"></div>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-3 col-md-6">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="text-muted text-uppercase fw-semibold fs-8 mb-2">PyTorch</div>
+        <div id="gpuAuditTorchVersion" class="fs-2 fw-bold text-gray-900">-</div>
+        <div id="gpuAuditTorchRuntime" class="text-muted fs-7 mt-2">-</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-3 col-md-6">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="text-muted text-uppercase fw-semibold fs-8 mb-2">CUDA Status</div>
+        <div id="gpuAuditCudaStatus" class="fs-2 fw-bold text-gray-900">-</div>
+        <div id="gpuAuditCudaDevices" class="text-muted fs-7 mt-2">-</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-3 col-md-6">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="text-muted text-uppercase fw-semibold fs-8 mb-2">Latest Analysis Device</div>
+        <div id="gpuAuditRecentDevice" class="fs-2 fw-bold text-gray-900">-</div>
+        <div id="gpuAuditRecentPerf" class="text-muted fs-7 mt-2">-</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-6">
+  <div class="card-header border-0 pt-7">
+    <h3 class="card-title m-0">GPU Audit Checklist</h3>
+  </div>
+  <div class="card-body pt-3">
+    <div id="gpuAuditChecklist" class="app-gpu-audit-grid"></div>
+  </div>
+</div>
+
+<div class="row g-6">
+  <div class="col-xl-6">
+    <div class="card h-100">
+      <div class="card-header border-0 pt-7">
+        <h3 class="card-title m-0">Runtime Details</h3>
+      </div>
+      <div class="card-body pt-3">
+        <div class="table-responsive">
+          <table class="table align-middle table-row-dashed fs-6 gy-3">
+            <tbody id="gpuAuditRuntimeTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-6">
+    <div class="card h-100">
+      <div class="card-header border-0 pt-7">
+        <h3 class="card-title m-0">Current Analysis Defaults</h3>
+      </div>
+      <div class="card-body pt-3">
+        <div class="table-responsive">
+          <table class="table align-middle table-row-dashed fs-6 gy-3">
+            <tbody id="gpuAuditConfigTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header border-0 pt-7">
+        <h3 class="card-title m-0">Recent Analysis Jobs</h3>
+      </div>
+      <div class="card-body pt-3">
+        <div class="table-responsive">
+          <table class="table align-middle table-row-dashed fs-6 gy-4">
+            <thead>
+              <tr class="text-start text-muted fw-bold fs-7 text-uppercase gs-0">
+                <th>Video</th>
+                <th>Status</th>
+                <th>Model</th>
+                <th>Device</th>
+                <th>Processing FPS</th>
+                <th>Effective FPS</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody id="gpuAuditRecentJobsTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header border-0 pt-7 d-flex justify-content-between align-items-center">
+        <h3 class="card-title m-0">Recommended Commands</h3>
+        <button id="gpuAuditReloadButton" type="button" class="btn btn-light-primary btn-sm">Reload Audit</button>
+      </div>
+      <div class="card-body pt-3">
+        <div id="gpuAuditCommandList" class="d-flex flex-column gap-4"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="/assets/gpu_audit.js"></script>
+{% endblock %}

@@ -149,6 +149,7 @@
   function statusBadge(status) {
     const map = {
       uploaded: "badge-light-primary",
+      converting: "badge-light-info",
       processing: "badge-light-warning",
       processed: "badge-light-success",
       failed: "badge-light-danger",
@@ -156,6 +157,7 @@
       queued: "badge-light-info",
       stale: "badge-light-danger",
       completed: "badge-light-success",
+      stopped: "badge-light-dark",
     };
     return map[status] || "badge-light";
   }
