@@ -125,6 +125,32 @@ Contoh one-liner paling praktis:
 powershell -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/gianovembrian/nicecount/main/scripts/windows/bootstrap_full_windows.ps1' -OutFile $env:TEMP\bootstrap_nicecount.ps1; & $env:TEMP\bootstrap_nicecount.ps1 -RepoUrl 'https://github.com/gianovembrian/nicecount.git' -TargetDir 'C:\NiceCount' -PgUser 'postgres' -PgPassword 'postgres' -DatabaseName 'vehicle_count' -OpenBrowser"
 ```
 
+## Windows One-Command Update
+
+Untuk server Windows yang **sudah terinstall**, gunakan update script ini:
+
+- [update_windows.ps1](/Users/gianovembrian/gitlab-project/vehicle_count/scripts/windows/update_windows.ps1)
+- [update_windows.bat](/Users/gianovembrian/gitlab-project/vehicle_count/scripts/windows/update_windows.bat)
+
+Yang dilakukan script update:
+
+1. stop server NiceCount yang sedang berjalan
+2. `git pull` update terbaru
+3. install/update dependency Python
+4. apply schema dan migration SQL
+5. start server lagi
+
+Catatan:
+
+- script update **tidak menimpa** `.env` yang sudah ada
+- kalau `.env` belum ada, script akan membuatnya dari `.env.example`
+
+One-liner update yang bisa langsung dijalankan di PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/gianovembrian/nicecount/main/scripts/windows/update_windows.ps1' -OutFile $env:TEMP\update_nicecount.ps1; & $env:TEMP\update_nicecount.ps1 -RepoUrl 'https://github.com/gianovembrian/nicecount.git' -TargetDir 'C:\NiceCount' -PgUser 'postgres' -PgPassword 'postgres' -DatabaseName 'vehicle_count' -OpenBrowser"
+```
+
 Kalau mau password PostgreSQL yang berbeda:
 
 ```powershell
