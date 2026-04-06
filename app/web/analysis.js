@@ -259,6 +259,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     return event && event.detected_label ? event.detected_label : (normalizedVehicleClass || "-");
   }
 
+  function formatCrossedTimeDisplay(seconds) {
+    const value = Number(seconds || 0);
+    if (!Number.isFinite(value)) {
+      return "-";
+    }
+    if (value < 60) {
+      return `${value.toFixed(2)} s`;
+    }
+    let minutes = Math.floor(value / 60);
+    let remainingSeconds = Math.round((value - (minutes * 60)) * 100) / 100;
+    if (remainingSeconds >= 60) {
+      minutes += 1;
+      remainingSeconds = 0;
+    }
+    const wholeSeconds = Math.floor(remainingSeconds);
+    return `${minutes}.${String(wholeSeconds).padStart(2, "0")} min`;
+  }
+
   function getSelectedVideo() {
     return state.videos.find((video) => video.id === state.selectedVideoId) || null;
   }
@@ -1025,7 +1043,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             data-seek-seconds="${Number(event.crossed_at_seconds || 0).toFixed(4)}"
             title="Jump playback to this time"
           >
-            ${Number(event.crossed_at_seconds || 0).toFixed(2)} s
+            ${formatCrossedTimeDisplay(event.crossed_at_seconds)}
           </button>
         </td>
         <td>${app.escapeHtml(formatDetectedType(event))}</td>
