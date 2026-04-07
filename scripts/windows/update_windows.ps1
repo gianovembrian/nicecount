@@ -66,6 +66,27 @@ function Invoke-External {
     }
 }
 
+function Stash-TrackedRepoChanges {
+    param([string]$RepoDir)
+
+    $statusOutput = (& git -C $RepoDir status --porcelain --untracked-files=no) | Where-Object { $_ -and $_.Trim() }
+    if ($LASTEXITCODE -ne 0) {
+        Throw-Friendly "Failed to inspect local git changes in $RepoDir"
+    }
+
+    if (-not $statusOutput) {
+        return
+    }
+
+    Write-Step "Stashing tracked local changes before update"
+    foreach ($statusLine in $statusOutput) {
+        Write-Host "   $statusLine" -ForegroundColor Yellow
+    }
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Invoke-External -FilePath "git" -Arguments @("-C", $RepoDir, "stash", "push", "-m", "NiceCount auto-stash before update $timestamp")
+}
+
 function Resolve-PythonCommand {
     $pyCommand = Get-Command py -ErrorAction SilentlyContinue
     if ($pyCommand) {
@@ -159,6 +180,7 @@ function Ensure-Repo {
 
         Write-Step "Updating existing repo"
         Invoke-External -FilePath "git" -Arguments @("-C", $TargetDirValue, "fetch", "--all", "--prune")
+        Stash-TrackedRepoChanges -RepoDir $TargetDirValue
         if ($BranchValue) {
             Invoke-External -FilePath "git" -Arguments @("-C", $TargetDirValue, "checkout", $BranchValue)
             Invoke-External -FilePath "git" -Arguments @("-C", $TargetDirValue, "pull", "--ff-only", "origin", $BranchValue)
