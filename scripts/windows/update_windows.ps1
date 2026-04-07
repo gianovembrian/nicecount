@@ -66,25 +66,41 @@ function Invoke-External {
     }
 }
 
-function Stash-TrackedRepoChanges {
+function Resolve-CurrentBranch {
     param([string]$RepoDir)
 
-    $statusOutput = (& git -C $RepoDir status --porcelain --untracked-files=no) | Where-Object { $_ -and $_.Trim() }
+    $branchName = (& git -C $RepoDir rev-parse --abbrev-ref HEAD) | Select-Object -First 1
     if ($LASTEXITCODE -ne 0) {
-        Throw-Friendly "Failed to inspect local git changes in $RepoDir"
+        Throw-Friendly "Failed to resolve the current git branch in $RepoDir"
     }
 
-    if (-not $statusOutput) {
-        return
+    $branchName = "$branchName".Trim()
+    if ([string]::IsNullOrWhiteSpace($branchName) -or $branchName -eq "HEAD") {
+        return "main"
     }
 
-    Write-Step "Stashing tracked local changes before update"
-    foreach ($statusLine in $statusOutput) {
-        Write-Host "   $statusLine" -ForegroundColor Yellow
+    return $branchName
+}
+
+function Force-SyncRepo {
+    param(
+        [string]$RepoDir,
+        [string]$RepoUrlValue,
+        [string]$BranchValue
+    )
+
+    Write-Step "Force syncing local repo to GitHub"
+    Invoke-External -FilePath "git" -Arguments @("-C", $RepoDir, "remote", "set-url", "origin", $RepoUrlValue)
+
+    $targetBranch = $BranchValue
+    if ([string]::IsNullOrWhiteSpace($targetBranch)) {
+        $targetBranch = Resolve-CurrentBranch -RepoDir $RepoDir
     }
 
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Invoke-External -FilePath "git" -Arguments @("-C", $RepoDir, "stash", "push", "-m", "NiceCount auto-stash before update $timestamp")
+    Invoke-External -FilePath "git" -Arguments @("-C", $RepoDir, "fetch", "origin", $targetBranch, "--prune")
+    Invoke-External -FilePath "git" -Arguments @("-C", $RepoDir, "checkout", "-B", $targetBranch, "origin/$targetBranch")
+    Invoke-External -FilePath "git" -Arguments @("-C", $RepoDir, "reset", "--hard", "origin/$targetBranch")
+    Invoke-External -FilePath "git" -Arguments @("-C", $RepoDir, "clean", "-fd")
 }
 
 function Resolve-PythonCommand {
@@ -179,15 +195,7 @@ function Ensure-Repo {
         }
 
         Write-Step "Updating existing repo"
-        Invoke-External -FilePath "git" -Arguments @("-C", $TargetDirValue, "fetch", "--all", "--prune")
-        Stash-TrackedRepoChanges -RepoDir $TargetDirValue
-        if ($BranchValue) {
-            Invoke-External -FilePath "git" -Arguments @("-C", $TargetDirValue, "checkout", $BranchValue)
-            Invoke-External -FilePath "git" -Arguments @("-C", $TargetDirValue, "pull", "--ff-only", "origin", $BranchValue)
-        }
-        else {
-            Invoke-External -FilePath "git" -Arguments @("-C", $TargetDirValue, "pull", "--ff-only")
-        }
+        Force-SyncRepo -RepoDir $TargetDirValue -RepoUrlValue $RepoUrlValue -BranchValue $BranchValue
     }
     else {
         Write-Step "Cloning repo"
@@ -267,7 +275,8 @@ function Ensure-PostgresDatabase {
             "sql/05_vehicle_event_count_lines.sql",
             "sql/06_detection_settings.sql",
             "sql/07_master_classes.sql",
-            "sql/08_video_status_converting.sql"
+            "sql/08_video_status_converting.sql",
+            "sql/09_vehicle_classification_standard.sql"
         )) {
             $sqlPath = Join-Path $RepoDir $sqlFile
             if (Test-Path $sqlPath) {
