@@ -755,6 +755,57 @@
     --metric-track: rgba(63, 66, 84, 0.18);
 }
 
+.analysis-dashboard-card {
+    border: 1px solid #eff2f5;
+    border-radius: 1.25rem;
+    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.05);
+}
+
+.analysis-dashboard-divider {
+    height: 1px;
+    margin: 2.25rem 0 1.75rem;
+    background: linear-gradient(90deg, rgba(223, 230, 239, 0) 0%, rgba(223, 230, 239, 0.92) 14%, rgba(223, 230, 239, 0.92) 86%, rgba(223, 230, 239, 0) 100%);
+}
+
+.analysis-class-chart-panel {
+    padding: 0.25rem 0 0.15rem;
+}
+
+.analysis-chart-kicker {
+    color: #7e8299;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 0.35rem;
+}
+
+.analysis-chart-title {
+    color: #181c32;
+    font-size: 1.18rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+}
+
+.analysis-chart-summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.3rem;
+    padding: 0.55rem 0.95rem;
+    border-radius: 999px;
+    background: #f1faff;
+    color: #009ef7;
+    font-size: 0.88rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+.analysis-class-chart {
+    min-height: 360px;
+}
+
 .analysis-total-card {
     border: 0;
     border-radius: 1.1rem;
@@ -986,6 +1037,11 @@
     .analysis-total-card-metric {
         width: 100%;
         justify-content: space-between;
+    }
+
+    .analysis-chart-summary {
+        width: 100%;
+        justify-content: flex-start;
     }
 }
 

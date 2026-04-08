@@ -115,8 +115,28 @@
   <div id="analysisLineTabs" class="analysis-line-tabs"></div>
 </div>
 
-<div id="analysisTotalSummary" class="mb-7"></div>
-<div id="analysisMetricsGrid" class="row g-7 mb-7"></div>
+<div class="card analysis-dashboard-card mb-7">
+  <div class="card-header border-0 pt-7 pb-0">
+    <h3 class="card-title m-0">Class Dashboard</h3>
+  </div>
+  <div class="card-body pt-6">
+    <div id="analysisTotalSummary" class="mb-7"></div>
+    <div id="analysisMetricsGrid" class="row g-7"></div>
+
+    <div class="analysis-dashboard-divider"></div>
+
+    <div class="analysis-class-chart-panel">
+      <div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+        <div>
+          <div class="analysis-chart-kicker">Recent Statistics</div>
+          <div class="analysis-chart-title">Vehicle class distribution</div>
+        </div>
+        <div id="analysisChartSummary" class="analysis-chart-summary">No analysis selected</div>
+      </div>
+      <div id="analysisClassChart" class="analysis-class-chart"></div>
+    </div>
+  </div>
+</div>
 
 <div class="card">
   <div class="card-header border-0 pt-7">

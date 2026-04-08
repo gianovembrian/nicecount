@@ -26,6 +26,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const previewHint = document.getElementById("analysisPreviewHint");
   const analysisTotalSummary = document.getElementById("analysisTotalSummary");
   const analysisMetricsGrid = document.getElementById("analysisMetricsGrid");
+  const analysisClassChartElement = document.getElementById("analysisClassChart");
+  const analysisChartSummary = document.getElementById("analysisChartSummary");
   const eventsBody = document.getElementById("analysisEventsBody");
   const alertBox = document.getElementById("analysisAlert");
   const exportAnalysisExcelButton = document.getElementById("exportAnalysisExcelButton");
@@ -45,6 +47,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     "metric-card-info",
     "metric-card-danger",
     "metric-card-dark",
+  ];
+  const CHART_BAR_COLORS = [
+    "#50CD89",
+    "#FFC700",
+    "#009EF7",
+    "#50CDFF",
+    "#F1416C",
+    "#3F4254",
   ];
   const state = {
     videos: [],
@@ -69,6 +79,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     pendingSeekSeconds: null,
     statusClockHandle: null,
     masterClasses: [],
+    classChart: null,
   };
 
   const PICKER_ICONS = {
@@ -230,8 +241,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function resetMetrics() {
+    if (state.classChart && typeof state.classChart.destroy === "function") {
+      state.classChart.destroy();
+      state.classChart = null;
+    }
     analysisTotalSummary.innerHTML = "";
     analysisMetricsGrid.innerHTML = "";
+    if (analysisClassChartElement) {
+      analysisClassChartElement.innerHTML = "";
+    }
+    if (analysisChartSummary) {
+      analysisChartSummary.textContent = "No analysis selected";
+    }
     state.masterClasses = [];
   }
 
@@ -292,6 +313,153 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (totalMetric) {
       totalMetric.textContent = String(totalVehicleCount || 0);
     }
+  }
+
+  function chartSeriesEntries(totals) {
+    return state.masterClasses.map((item, index) => ({
+      code: String(item.code || ""),
+      label: item.label || item.code,
+      value: Number(totals[String(item.code || "")] || 0),
+      color: CHART_BAR_COLORS[index % CHART_BAR_COLORS.length],
+    }));
+  }
+
+  function renderClassDistributionChart(totals, totalVehicleCount) {
+    if (!analysisClassChartElement) {
+      return;
+    }
+
+    if (state.classChart && typeof state.classChart.destroy === "function") {
+      state.classChart.destroy();
+      state.classChart = null;
+    }
+
+    const entries = chartSeriesEntries(totals);
+    const scopeLabel = state.availableLines.length > 1 && state.selectedLineOrder
+      ? formatLineDisplayName(state.selectedLineOrder)
+      : "All lines";
+    if (analysisChartSummary) {
+      analysisChartSummary.textContent = `${scopeLabel} • Total ${totalVehicleCount || 0} vehicles`;
+    }
+
+    if (!window.ApexCharts) {
+      analysisClassChartElement.innerHTML = `
+        <div class="text-muted py-10 text-center">Chart library is unavailable on this page.</div>
+      `;
+      return;
+    }
+
+    const labelColor = "#A1A5B7";
+    const borderColor = "#EFF2F5";
+    const baseColor = "#181C32";
+    const seriesData = entries.map((entry) => ({
+      x: entry.code,
+      y: entry.value,
+      fillColor: entry.color,
+      metaLabel: entry.label,
+    }));
+
+    state.classChart = new window.ApexCharts(analysisClassChartElement, {
+      chart: {
+        type: "bar",
+        height: 360,
+        toolbar: { show: false },
+        animations: {
+          enabled: true,
+          easing: "easeinout",
+          speed: 420,
+        },
+        fontFamily: "inherit",
+      },
+      series: [
+        {
+          name: "Vehicles",
+          data: seriesData,
+        },
+      ],
+      plotOptions: {
+        bar: {
+          distributed: true,
+          borderRadius: 7,
+          columnWidth: "42%",
+          dataLabels: {
+            position: "top",
+          },
+        },
+      },
+      dataLabels: {
+        enabled: true,
+        offsetY: -18,
+        style: {
+          fontSize: "11px",
+          fontWeight: "700",
+          colors: [baseColor],
+        },
+        formatter(value) {
+          return String(value);
+        },
+      },
+      legend: { show: false },
+      colors: entries.map((entry) => entry.color),
+      grid: {
+        borderColor,
+        strokeDashArray: 4,
+        yaxis: {
+          lines: {
+            show: true,
+          },
+        },
+      },
+      xaxis: {
+        type: "category",
+        categories: entries.map((entry) => entry.code),
+        axisBorder: { show: false },
+        axisTicks: { show: false },
+        labels: {
+          style: {
+            colors: entries.map(() => labelColor),
+            fontSize: "12px",
+            fontWeight: 600,
+          },
+        },
+        tooltip: { enabled: false },
+      },
+      yaxis: {
+        min: 0,
+        forceNiceScale: true,
+        decimalsInFloat: 0,
+        labels: {
+          style: {
+            colors: [labelColor],
+            fontSize: "12px",
+          },
+          formatter(value) {
+            return String(Math.round(value));
+          },
+        },
+      },
+      tooltip: {
+        theme: "light",
+        y: {
+          formatter(value) {
+            return `${Math.round(Number(value || 0))} vehicles`;
+          },
+        },
+        x: {
+          formatter(value, { dataPointIndex }) {
+            const entry = entries[dataPointIndex];
+            return entry ? `${entry.code} • ${entry.label}` : String(value);
+          },
+        },
+      },
+      states: {
+        normal: { filter: { type: "none" } },
+        hover: { filter: { type: "lighten", value: 0.06 } },
+        active: { filter: { type: "darken", value: 0.08 } },
+      },
+    });
+
+    state.classChart.render();
   }
 
   function formatDetectedType(event) {
@@ -1361,6 +1529,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     updateMetricValues(totals, totalVehicleCount);
+    renderClassDistributionChart(totals, totalVehicleCount);
 
     videoTitle.textContent = displayPlaybackFilename(video) || video.original_filename;
     videoDescription.textContent = video.description || "No description";
