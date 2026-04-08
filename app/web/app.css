@@ -35,17 +35,19 @@
 }
 
 .app-topbar-badge {
-    width: 44px;
-    height: 44px;
+    width: 52px;
+    height: 52px;
     border-radius: 14px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     font-weight: 800;
-    letter-spacing: 0.04em;
+    font-size: 1rem;
+    letter-spacing: 0.05em;
     color: #ffffff;
-    background: linear-gradient(135deg, #3699ff 0%, #7239ea 100%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 10px 24px rgba(30, 144, 255, 0.26);
+    background: #1f1f2f;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 10px 24px rgba(8, 10, 24, 0.22);
 }
 
 .app-topbar-brand {
@@ -174,10 +176,11 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #f1416c 0%, #7239ea 100%);
+    background: #009ef7;
     color: #ffffff;
     font-weight: 700;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 10px 20px rgba(0, 158, 247, 0.18);
 }
 
 .app-topbar-logout {
@@ -255,8 +258,9 @@
     justify-content: center;
     color: #ffffff;
     font-weight: 700;
-    background: linear-gradient(135deg, #009ef7 0%, #7239ea 100%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    background: #009ef7;
+    border: 1px solid rgba(0, 158, 247, 0.12);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 10px 20px rgba(0, 158, 247, 0.14);
 }
 
 .app-gpu-audit-grid {
@@ -330,6 +334,30 @@
 
 .app-actions-dropdown {
     display: inline-block;
+}
+
+.app-row-actions {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.55rem;
+}
+
+.app-primary-row-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-height: 2.9rem;
+    border-radius: 0.85rem;
+    padding: 0.7rem 0.95rem;
+    font-weight: 600;
+}
+
+.app-primary-row-action .app-inline-icon {
+    width: 1.05rem;
+    height: 1.05rem;
+    opacity: 0.92;
 }
 
 .app-actions-toggle {
@@ -597,17 +625,18 @@
 }
 
 .login-brand-badge {
-    width: 54px;
-    height: 54px;
+    width: 70px;
+    height: 70px;
     border-radius: 18px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     font-weight: 800;
-    letter-spacing: 0.04em;
+    font-size: 1.4rem;
+    letter-spacing: 0.05em;
     color: #ffffff;
-    background: linear-gradient(135deg, #3699ff 0%, #7239ea 100%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 14px 30px rgba(30, 144, 255, 0.18);
+    background: #1f1f2f;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 18px 36px rgba(13, 18, 31, 0.18);
 }
 
 .login-brand-name {
@@ -726,6 +755,83 @@
     --metric-track: rgba(63, 66, 84, 0.18);
 }
 
+.analysis-total-card {
+    border: 0;
+    border-radius: 1.1rem;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at top right, rgba(255, 255, 255, 0.18), transparent 26%),
+        linear-gradient(135deg, #1f1f2f 0%, #2a3550 100%);
+    box-shadow: 0 16px 34px rgba(17, 24, 39, 0.12);
+}
+
+.analysis-total-card-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 1.6rem 1.8rem;
+}
+
+.analysis-total-card-copy {
+    min-width: 0;
+}
+
+.analysis-total-card-kicker {
+    color: rgba(255, 255, 255, 0.68);
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 0.45rem;
+}
+
+.analysis-total-card-title {
+    color: #ffffff;
+    font-size: 1.45rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    margin-bottom: 0.35rem;
+}
+
+.analysis-total-card-note {
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.96rem;
+    line-height: 1.55;
+    max-width: 36rem;
+}
+
+.analysis-total-card-metric {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    flex-shrink: 0;
+}
+
+.analysis-total-card-value {
+    color: #ffffff;
+    font-size: 3.3rem;
+    font-weight: 800;
+    letter-spacing: -0.06em;
+    line-height: 1;
+}
+
+.analysis-total-card-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.2rem;
+    padding: 0.5rem 0.9rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
 .video-player-shell {
     background: #0b1014;
     border-radius: 0.85rem;
@@ -785,6 +891,102 @@
 .count-lines-overlay {
     pointer-events: auto;
     cursor: crosshair;
+}
+
+.count-lines-action-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    padding: 1rem;
+    border-radius: 1rem;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    border: 1px solid #eff2f5;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
+.count-lines-action-primary .btn,
+.count-lines-action-grid .btn {
+    width: 100%;
+    min-height: 52px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    border-radius: 0.9rem;
+    padding: 0.9rem 1rem;
+    font-weight: 600;
+}
+
+.count-lines-action-primary .btn .app-inline-icon,
+.count-lines-action-grid .btn .app-inline-icon {
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 0.7rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 1;
+}
+
+.count-lines-action-primary .btn .app-inline-icon svg,
+.count-lines-action-grid .btn .app-inline-icon svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.count-lines-action-primary .btn-primary .app-inline-icon {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.count-lines-action-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.count-lines-action-grid .btn-light-warning .app-inline-icon {
+    color: #ffc700;
+    background: rgba(255, 199, 0, 0.16);
+}
+
+.count-lines-action-grid .btn-light-danger .app-inline-icon {
+    color: #f1416c;
+    background: rgba(241, 65, 108, 0.12);
+}
+
+.count-lines-action-grid .btn-light-primary .app-inline-icon {
+    color: #009ef7;
+    background: rgba(0, 158, 247, 0.12);
+}
+
+.count-lines-action-grid .btn-light .app-inline-icon {
+    color: #7e8299;
+    background: rgba(126, 130, 153, 0.12);
+}
+
+.count-lines-action-note {
+    color: #7e8299;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    padding: 0 0.15rem;
+}
+
+@media (max-width: 575.98px) {
+    .count-lines-action-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 991.98px) {
+    .analysis-total-card-body {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .analysis-total-card-metric {
+        width: 100%;
+        justify-content: space-between;
+    }
 }
 
 .video-live {

@@ -37,21 +37,28 @@ Semua halaman memakai asset theme Metronic dari folder `templates/metronic`.
 - `vehicle_events`
 - `analysis_golongan_totals`
 
-## Klasifikasi Golongan
+## Vehicle Class Standard
 
-Yang disimpan saat ini:
+Sistem sekarang memakai standar golongan berikut:
 
-- `Golongan I`
-- `Golongan II`
-- `Golongan III`
-- `Golongan IV`
-- `Golongan V`
+- `1` Motorcycles and 3-wheel motor vehicles
+- `2` Sedans, jeeps, and station wagons
+- `3` Medium passenger transport vehicles
+- `4` Pickups, micro trucks, and delivery vehicles
+- `5a` Small buses
+- `5b` Large buses
+- `6a` Light 2-axle trucks
+- `6b` Medium 2-axle trucks
+- `7a` 3-axle trucks
+- `7b` Articulated trucks
+- `7c` Semi-trailer trucks
+- `8` Non-motorized vehicles
 
 Catatan:
 
-- Untuk `car`, `motorcycle`, dan `bus`, MVP ini memetakan ke `Golongan I`.
-- Untuk `truck`, `Golongan II` sampai `Golongan V` saat ini dihitung dengan heuristik ukuran bounding box dari kamera tunggal.
-- Jadi hasil golongan berat belum bisa dianggap sama dengan hitung sumbu aktual. Itu perlu model/dataset yang lebih spesifik di tahap berikut.
+- Sistem memisahkan `raw object detection`, `vehicle type classification`, dan `final golongan`.
+- Untuk kamera tunggal, pengelompokan bus/truck besar masih berbasis heuristik geometri dan perspektif kamera.
+- Untuk hasil yang benar-benar setara hitung sumbu aktual, tetap dibutuhkan model/dataset yang lebih spesifik atau multi-stage classification.
 
 ## Setup
 
@@ -80,12 +87,19 @@ Kalau database sudah terbuat dari schema lama, jalankan migrasi:
 
 ```bash
 psql -d vehicle_count -f sql/03_mvp_minimal_app.sql
+psql -d vehicle_count -f sql/09_vehicle_classification_standard.sql
 ```
 
 4. Jalankan server
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+## Testing
+
+```bash
+python3 -m unittest discover -s tests
 ```
 
 ## Windows Auto Install

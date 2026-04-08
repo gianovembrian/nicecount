@@ -226,7 +226,13 @@ class VehicleEvent(Base):
     track_id: Mapped[Optional[int]] = mapped_column(BigInteger)
     vehicle_class: Mapped[str] = mapped_column(String(50), nullable=False)
     detected_label: Mapped[Optional[str]] = mapped_column(String(100))
-    golongan_code: Mapped[str] = mapped_column(String(50), nullable=False)
+    vehicle_type_code: Mapped[Optional[str]] = mapped_column(String(100))
+    vehicle_type_label: Mapped[Optional[str]] = mapped_column(String(255))
+    golongan_code: Mapped[str] = mapped_column(
+        String(50),
+        ForeignKey("master_classes.code", ondelete="RESTRICT"),
+        nullable=False,
+    )
     golongan_label: Mapped[str] = mapped_column(String(100), nullable=False)
     source_label: Mapped[Optional[str]] = mapped_column(String(100))
     count_line_order: Mapped[Optional[int]] = mapped_column(Integer)
@@ -263,7 +269,11 @@ class AnalysisGolonganTotal(Base):
         ForeignKey("analysis_jobs.id", ondelete="CASCADE"),
         nullable=False,
     )
-    golongan_code: Mapped[str] = mapped_column(String(50), nullable=False)
+    golongan_code: Mapped[str] = mapped_column(
+        String(50),
+        ForeignKey("master_classes.code", ondelete="RESTRICT"),
+        nullable=False,
+    )
     golongan_label: Mapped[str] = mapped_column(String(100), nullable=False)
     vehicle_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

@@ -350,17 +350,22 @@ def update_master_classes(
     for item in payload.items:
         normalized_code = (item.code or "").strip()
         if normalized_code not in valid_codes:
-            raise HTTPException(status_code=400, detail=f"Unknown master class code: {normalized_code}")
+            raise HTTPException(status_code=400, detail=f"Unknown vehicle class code: {normalized_code}")
         if normalized_code in received_codes:
-            raise HTTPException(status_code=400, detail=f"Duplicate master class code: {normalized_code}")
+            raise HTTPException(status_code=400, detail=f"Duplicate vehicle class code: {normalized_code}")
         received_codes.add(normalized_code)
 
         row = row_map.get(normalized_code)
         if row is None:
-            raise HTTPException(status_code=404, detail=f"Master class not found: {normalized_code}")
+            raise HTTPException(status_code=404, detail=f"Vehicle class not found: {normalized_code}")
 
         row.label = item.label.strip()
         row.description = (item.description or "").strip() or None
+
+    missing_codes = valid_codes - received_codes
+    if missing_codes:
+        missing_list = ", ".join(sorted(missing_codes))
+        raise HTTPException(status_code=400, detail=f"Missing vehicle class codes: {missing_list}")
 
     db.commit()
     refreshed_rows = get_or_create_master_classes(db)

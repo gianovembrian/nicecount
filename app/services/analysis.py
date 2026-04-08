@@ -17,19 +17,15 @@ from app.constants import (
     COCO_CLASS_TO_VEHICLE_CLASS,
     DEFAULT_MOTORCYCLE_MIN_CONFIDENCE,
     DEFAULT_VEHICLE_MIN_CONFIDENCE,
-    DETECTED_TYPE_LABELS,
     DIRECTION_NORMAL,
     DIRECTION_OPPOSITE,
-    GOLONGAN_I,
-    GOLONGAN_II,
-    GOLONGAN_III,
-    GOLONGAN_IV,
-    GOLONGAN_V,
     JOB_STATUS_COMPLETED,
     JOB_STATUS_FAILED,
     JOB_STATUS_PENDING,
     JOB_STATUS_PROCESSING,
+    RAW_DETECTION_LABELS,
     TRACKABLE_CLASS_IDS,
+    VEHICLE_CLASS_BICYCLE,
     VEHICLE_CLASS_BUS,
     VEHICLE_CLASS_CAR,
     VEHICLE_CLASS_MOTORCYCLE,
@@ -44,12 +40,14 @@ from app.models import AnalysisGolonganTotal, AnalysisJob, CountLine, Site, Vehi
 from app.services.live_preview import clear_preview, delete_preview_artifacts, finish_preview, publish_preview_frame, start_preview
 from app.services.master_classes import build_master_class_lookup, get_or_create_master_classes
 from app.services.storage import delete_relative_file, ensure_storage_layout
+from app.services.vehicle_classification import classify_vehicle
 from app.services.video_conversion import resolve_analysis_video_path
 
 CLASS_MIN_AREA_RATIO = {
+    VEHICLE_CLASS_BICYCLE: 0.000012,
     VEHICLE_CLASS_MOTORCYCLE: 0.00002,
     VEHICLE_CLASS_CAR: 0.00018,
-    VEHICLE_CLASS_BUS: 0.0003,
+    VEHICLE_CLASS_BUS: 0.00018,
     VEHICLE_CLASS_TRUCK: 0.00035,
 }
 
@@ -58,6 +56,13 @@ TRACK_CONFIDENCE_SMOOTHING_ALPHA = 0.65
 TRACK_SCORE_DECAY = 0.92
 TRACK_SCORE_FLOOR = 0.02
 TRACK_STATE_RESET_GAP_FRAMES = 90
+LINE_INTERSECTION_EPSILON = 1e-6
+CLOSE_LINE_PAIR_MAX_ANGLE_DEGREES = 12.0
+CLOSE_LINE_PAIR_MAX_GAP_RATIO = 0.12
+CLOSE_LINE_PAIR_MAX_TIME_GAP_SECONDS = 5.0
+CLOSE_LINE_PAIR_MAX_TANGENT_GAP_RATIO = 0.18
+CLOSE_LINE_PAIR_MIN_MATCHES = 5
+BUS_CONFIDENCE_RELAXATION = 0.08
 
 _STOP_EVENTS: dict[UUID, threading.Event] = {}
 _STOP_EVENTS_LOCK = threading.Lock()
@@ -74,6 +79,24 @@ class TrackState:
     last_seen_frame: int
     class_scores: dict[str, float]
     label_scores: dict[str, float]
+    class_reference_boxes: dict[str, tuple[float, float, float, float]]
+    class_reference_scores: dict[str, float]
+    class_reference_labels: dict[str, str]
+    reference_bbox: tuple[float, float, float, float]
+    reference_score: float
+    reference_vehicle_class: str
+    reference_source_label: str
+
+
+@dataclass(frozen=True)
+class TrackProfile:
+    vehicle_class: str
+    source_label: str
+    detected_label: str
+    vehicle_type_code: str
+    vehicle_type_label: str
+    golongan_code: str
+    golongan_label: str
 
 
 @dataclass
@@ -151,6 +174,68 @@ def _cleanup_stopped_analysis(db, video_id: UUID, job_id: UUID) -> None:
     video.status = VIDEO_STATUS_UPLOADED
     video.processing_error = None
     db.commit()
+
+
+def _persist_vehicle_events(
+    db,
+    *,
+    video: VideoUpload,
+    job: AnalysisJob,
+    site: Site,
+    totals_map: dict[str, AnalysisGolonganTotal],
+    events: list[dict],
+) -> tuple[list[dict], dict[str, int]]:
+    db.execute(delete(VehicleEvent).where(VehicleEvent.video_upload_id == video.id))
+
+    counts_by_golongan = {code: 0 for code in totals_map}
+    for total_row in totals_map.values():
+        total_row.vehicle_count = 0
+
+    ordered_events = sorted(
+        (dict(event) for event in events),
+        key=lambda event: (
+            float(event.get("crossed_at_seconds") or 0.0),
+            int(event.get("count_line_order") or 0),
+            int(event.get("track_id") or 0),
+        ),
+    )
+
+    for sequence_no, event in enumerate(ordered_events, start=1):
+        event["sequence_no"] = sequence_no
+        golongan_code = str(event["golongan_code"])
+        counts_by_golongan[golongan_code] += 1
+        totals_map[golongan_code].vehicle_count += 1
+
+        db.add(
+            VehicleEvent(
+                video_upload_id=video.id,
+                analysis_job_id=job.id,
+                site_id=site.id,
+                sequence_no=sequence_no,
+                track_id=int(event["track_id"]) if event.get("track_id") is not None else None,
+                vehicle_class=str(event["vehicle_class"]),
+                detected_label=event.get("detected_label"),
+                vehicle_type_code=event.get("vehicle_type_code"),
+                vehicle_type_label=event.get("vehicle_type_label"),
+                golongan_code=golongan_code,
+                golongan_label=str(event["golongan_label"]),
+                source_label=event.get("source_label"),
+                count_line_order=int(event["count_line_order"]) if event.get("count_line_order") is not None else None,
+                count_line_name=event.get("count_line_name"),
+                direction=str(event["direction"]),
+                crossed_at_seconds=float(event["crossed_at_seconds"]),
+                crossed_at_frame=int(event["crossed_at_frame"]),
+                confidence=float(event["confidence"]) if event.get("confidence") is not None else None,
+                speed_kph=float(event["speed_kph"]) if event.get("speed_kph") is not None else None,
+                bbox_x1=float(event["bbox_x1"]) if event.get("bbox_x1") is not None else None,
+                bbox_y1=float(event["bbox_y1"]) if event.get("bbox_y1") is not None else None,
+                bbox_x2=float(event["bbox_x2"]) if event.get("bbox_x2") is not None else None,
+                bbox_y2=float(event["bbox_y2"]) if event.get("bbox_y2") is not None else None,
+            )
+        )
+
+    db.commit()
+    return ordered_events, counts_by_golongan
 
 
 def build_process_config(overrides: Optional[dict] = None) -> ProcessConfig:
@@ -301,7 +386,7 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
         master_class_rows = get_or_create_master_classes(db)
         master_class_lookup = build_master_class_lookup(master_class_rows)
         if not master_class_lookup:
-            raise RuntimeError("No master class is available")
+            raise RuntimeError("No master vehicle class configuration is available")
 
         config = build_process_config(overrides or job.config_json or {})
         settings = get_settings()
@@ -497,14 +582,29 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
                     stable_vehicle_class = stabilized["vehicle_class"]
                     stable_source_label = stabilized["source_label"]
                     stable_confidence = stabilized["confidence"]
+                    reference_vehicle_class = stabilized["reference_vehicle_class"]
+                    reference_source_label = stabilized["reference_source_label"]
                     x1, y1, x2, y2 = stabilized["bbox"]
                     stable_bbox = (x1, y1, x2, y2)
+                    classification_result = classify_vehicle(
+                        vehicle_class=reference_vehicle_class,
+                        source_label=reference_source_label,
+                        bbox=stabilized["reference_bbox"],
+                        frame_width=max(working_width, 1),
+                        frame_height=max(working_height, 1),
+                        master_class_lookup=master_class_lookup,
+                    )
 
                     frame_detections.append(
                         {
                             "track_id": int(track_id),
-                            "vehicle_class": stable_vehicle_class,
-                            "source_label": stable_source_label,
+                            "vehicle_class": reference_vehicle_class,
+                            "source_label": reference_source_label,
+                            "detected_label": classification_result.raw_detected_label,
+                            "vehicle_type_code": classification_result.vehicle_type_code,
+                            "vehicle_type_label": classification_result.vehicle_type_label,
+                            "golongan_code": classification_result.golongan_code,
+                            "golongan_label": classification_result.golongan_label,
                             "confidence": round(float(stable_confidence), 4),
                             "x1": round(x1 / max(float(working_width), 1.0), 6),
                             "y1": round(y1 / max(float(working_height), 1.0), 6),
@@ -523,21 +623,11 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
                             line_order = int(line.line_order)
                             if line_order in counted_lines:
                                 continue
-                            previous_side = _point_side(line_start, line_end, previous_point)
-                            current_side = _point_side(line_start, line_end, point)
-                            if previous_side != 0 and current_side != 0 and previous_side * current_side < 0:
-                                direction = DIRECTION_NORMAL if previous_side < 0 < current_side else DIRECTION_OPPOSITE
+                            direction = _detect_line_crossing(line_start, line_end, previous_point, point)
+                            if direction:
                                 crossed_lines.append((line_order, direction, line))
 
                         if crossed_lines:
-                            detected_label, golongan_code, golongan_label = _classify_golongan(
-                                vehicle_class=stable_vehicle_class,
-                                bbox=stable_bbox,
-                                frame_width=max(working_width, 1),
-                                frame_height=max(working_height, 1),
-                                master_class_lookup=master_class_lookup,
-                            )
-
                             for line_order, direction, line in crossed_lines:
                                 counted_lines.add(line_order)
                                 sequence_no += 1
@@ -549,9 +639,11 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
                                         sequence_no=sequence_no,
                                         track_id=int(track_id),
                                         vehicle_class=stable_vehicle_class,
-                                        detected_label=detected_label,
-                                        golongan_code=golongan_code,
-                                        golongan_label=golongan_label,
+                                        detected_label=classification_result.raw_detected_label,
+                                        vehicle_type_code=classification_result.vehicle_type_code,
+                                        vehicle_type_label=classification_result.vehicle_type_label,
+                                        golongan_code=classification_result.golongan_code,
+                                        golongan_label=classification_result.golongan_label,
                                         source_label=stable_source_label,
                                         count_line_order=line_order,
                                         count_line_name=line.name,
@@ -567,22 +659,30 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
                                     )
                                 )
 
-                                totals_map[golongan_code].vehicle_count += 1
-                                counts_by_golongan[golongan_code] += 1
+                                totals_map[classification_result.golongan_code].vehicle_count += 1
+                                counts_by_golongan[classification_result.golongan_code] += 1
                                 report_events.append(
                                     {
                                         "sequence_no": sequence_no,
                                         "track_id": int(track_id),
                                         "vehicle_class": stable_vehicle_class,
-                                        "detected_label": detected_label,
-                                        "golongan_code": golongan_code,
-                                        "golongan_label": golongan_label,
+                                        "detected_label": classification_result.raw_detected_label,
+                                        "vehicle_type_code": classification_result.vehicle_type_code,
+                                        "vehicle_type_label": classification_result.vehicle_type_label,
+                                        "golongan_code": classification_result.golongan_code,
+                                        "golongan_label": classification_result.golongan_label,
+                                        "source_label": stable_source_label,
                                         "count_line_order": line_order,
                                         "count_line_name": line.name,
                                         "direction": direction,
                                         "crossed_at_seconds": float(frame_number / fps),
                                         "crossed_at_frame": frame_number,
                                         "confidence": float(stable_confidence),
+                                        "speed_kph": None,
+                                        "bbox_x1": x1 * scale_x,
+                                        "bbox_y1": y1 * scale_y,
+                                        "bbox_x2": x2 * scale_x,
+                                        "bbox_y2": y2 * scale_y,
                                     }
                                 )
                                 event_found = True
@@ -650,6 +750,29 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
                 )
                 db.commit()
 
+        report_events = _build_report_events_from_overlay_frames(
+            overlay_frames,
+            lines=lines,
+            source_width=source_width,
+            source_height=source_height,
+            master_class_lookup=master_class_lookup,
+        )
+        report_events = _reconcile_close_parallel_line_events(
+            report_events,
+            lines=lines,
+            frame_width=max(source_width, 1),
+            frame_height=max(source_height, 1),
+            fps=fps,
+        )
+        report_events, counts_by_golongan = _persist_vehicle_events(
+            db,
+            video=video,
+            job=job,
+            site=site,
+            totals_map=totals_map,
+            events=report_events,
+        )
+        sequence_no = len(report_events)
         job.processed_frames = processed_frames
         job.total_frames = effective_total_frames
         job.summary_json = _build_summary(
@@ -686,7 +809,7 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
                         }
                         for code, payload in master_class_lookup.items()
                     ],
-                    "note": "Classes II to V are currently estimated using object-size heuristics from a single camera view.",
+                    "note": "Vehicle groups are estimated from detector output plus single-camera geometry heuristics. Re-run analysis after changing the official class mapping.",
                 },
                 indent=2,
             ),
@@ -806,7 +929,10 @@ def _build_summary(
         "totals_by_golongan": totals,
         "golongan_labels": {code: payload["label"] for code, payload in master_class_lookup.items()},
         "golongan_descriptions": {code: payload["description"] for code, payload in master_class_lookup.items()},
-        "classification_note": "Classes II to V use object-size heuristics, not actual axle counting.",
+        "classification_note": (
+            "Vehicle groups are inferred from detector output and single-camera geometry heuristics; "
+            "axle configuration is estimated, not physically counted."
+        ),
         "performance": performance or {},
     }
 
@@ -873,6 +999,24 @@ def _decay_score_map(scores: dict[str, float]) -> dict[str, float]:
     return next_scores
 
 
+def _detection_evidence_score(
+    vehicle_class: str,
+    confidence: float,
+    bbox: tuple[float, float, float, float],
+) -> float:
+    width = max(float(bbox[2]) - float(bbox[0]), 1.0)
+    height = max(float(bbox[3]) - float(bbox[1]), 1.0)
+    area = width * height
+    class_bias = {
+        VEHICLE_CLASS_BUS: 1.2,
+        VEHICLE_CLASS_TRUCK: 1.15,
+        VEHICLE_CLASS_CAR: 1.0,
+        VEHICLE_CLASS_MOTORCYCLE: 0.9,
+        VEHICLE_CLASS_BICYCLE: 0.85,
+    }.get(vehicle_class, 1.0)
+    return max(area * max(float(confidence), 0.01) * class_bias, 0.01)
+
+
 def _pick_dominant_score(scores: dict[str, float], fallback: str) -> str:
     if not scores:
         return fallback
@@ -898,16 +1042,24 @@ def _stabilize_track_detection(
     confidence: float,
     bbox: tuple[float, float, float, float],
 ) -> dict:
-    fallback_label = source_label or DETECTED_TYPE_LABELS.get(vehicle_class, vehicle_class)
+    fallback_label = source_label or RAW_DETECTION_LABELS.get(vehicle_class, vehicle_class)
     state = track_states.get(track_id)
+    reference_score = _detection_evidence_score(vehicle_class, confidence, bbox)
 
     if state is None or (frame_number - state.last_seen_frame) > TRACK_STATE_RESET_GAP_FRAMES:
         state = TrackState(
             bbox=bbox,
             confidence=float(confidence),
             last_seen_frame=frame_number,
-            class_scores={vehicle_class: float(confidence)},
-            label_scores={fallback_label: float(confidence)},
+            class_scores={vehicle_class: reference_score},
+            label_scores={fallback_label: reference_score},
+            class_reference_boxes={vehicle_class: bbox},
+            class_reference_scores={vehicle_class: reference_score},
+            class_reference_labels={vehicle_class: fallback_label},
+            reference_bbox=bbox,
+            reference_score=reference_score,
+            reference_vehicle_class=vehicle_class,
+            reference_source_label=fallback_label,
         )
         track_states[track_id] = state
         return {
@@ -915,23 +1067,47 @@ def _stabilize_track_detection(
             "confidence": float(confidence),
             "vehicle_class": vehicle_class,
             "source_label": fallback_label,
+            "reference_bbox": bbox,
+            "reference_vehicle_class": vehicle_class,
+            "reference_source_label": fallback_label,
         }
 
     state.class_scores = _decay_score_map(state.class_scores)
     state.label_scores = _decay_score_map(state.label_scores)
-    state.class_scores[vehicle_class] = state.class_scores.get(vehicle_class, 0.0) + float(confidence)
-    state.label_scores[fallback_label] = state.label_scores.get(fallback_label, 0.0) + float(confidence)
+    state.class_scores[vehicle_class] = state.class_scores.get(vehicle_class, 0.0) + reference_score
+    state.label_scores[fallback_label] = state.label_scores.get(fallback_label, 0.0) + reference_score
     state.bbox = _blend_bbox(state.bbox, bbox)
     state.confidence = (state.confidence * (1.0 - TRACK_CONFIDENCE_SMOOTHING_ALPHA)) + (
         float(confidence) * TRACK_CONFIDENCE_SMOOTHING_ALPHA
     )
+
+    existing_class_reference_score = float(state.class_reference_scores.get(vehicle_class, 0.0))
+    if reference_score >= existing_class_reference_score:
+        state.class_reference_boxes[vehicle_class] = bbox
+        state.class_reference_scores[vehicle_class] = reference_score
+        state.class_reference_labels[vehicle_class] = fallback_label
+
+    dominant_vehicle_class = _pick_dominant_score(state.class_scores, vehicle_class)
+    dominant_reference_bbox = state.class_reference_boxes.get(dominant_vehicle_class, state.bbox)
+    dominant_reference_score = float(state.class_reference_scores.get(dominant_vehicle_class, reference_score))
+    dominant_source_label = state.class_reference_labels.get(
+        dominant_vehicle_class,
+        _pick_dominant_score(state.label_scores, fallback_label),
+    )
+    state.reference_bbox = dominant_reference_bbox
+    state.reference_score = dominant_reference_score
+    state.reference_vehicle_class = dominant_vehicle_class
+    state.reference_source_label = dominant_source_label
     state.last_seen_frame = frame_number
 
     return {
         "bbox": state.bbox,
         "confidence": float(state.confidence),
-        "vehicle_class": _pick_dominant_score(state.class_scores, vehicle_class),
-        "source_label": _pick_dominant_score(state.label_scores, fallback_label),
+        "vehicle_class": dominant_vehicle_class,
+        "source_label": dominant_source_label,
+        "reference_bbox": state.reference_bbox,
+        "reference_vehicle_class": state.reference_vehicle_class,
+        "reference_source_label": state.reference_source_label,
     }
 
 
@@ -939,6 +1115,531 @@ def _point_side(line_start: tuple[float, float], line_end: tuple[float, float], 
     return ((line_end[0] - line_start[0]) * (point[1] - line_start[1])) - (
         (line_end[1] - line_start[1]) * (point[0] - line_start[0])
     )
+
+
+def _vector_subtract(left: tuple[float, float], right: tuple[float, float]) -> tuple[float, float]:
+    return (float(left[0]) - float(right[0]), float(left[1]) - float(right[1]))
+
+
+def _dot_2d(left: tuple[float, float], right: tuple[float, float]) -> float:
+    return (float(left[0]) * float(right[0])) + (float(left[1]) * float(right[1]))
+
+
+def _cross_2d(left: tuple[float, float], right: tuple[float, float]) -> float:
+    return (float(left[0]) * float(right[1])) - (float(left[1]) * float(right[0]))
+
+
+def _line_unit_vectors(
+    line_start: tuple[float, float],
+    line_end: tuple[float, float],
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    tangent = _vector_subtract(line_end, line_start)
+    magnitude = math.hypot(tangent[0], tangent[1]) or 1.0
+    unit_tangent = (tangent[0] / magnitude, tangent[1] / magnitude)
+    unit_normal = (-unit_tangent[1], unit_tangent[0])
+    return unit_tangent, unit_normal
+
+
+def _line_midpoint(line: CountLine | VideoCountLine) -> tuple[float, float]:
+    return ((float(line.start_x) + float(line.end_x)) / 2.0, (float(line.start_y) + float(line.end_y)) / 2.0)
+
+
+def _line_projection(line: CountLine | VideoCountLine, unit_normal: tuple[float, float]) -> float:
+    midpoint = _line_midpoint(line)
+    return _dot_2d(midpoint, unit_normal)
+
+
+def _segments_intersect(
+    segment_start: tuple[float, float],
+    segment_end: tuple[float, float],
+    line_start: tuple[float, float],
+    line_end: tuple[float, float],
+    epsilon: float = LINE_INTERSECTION_EPSILON,
+) -> bool:
+    segment_vector = _vector_subtract(segment_end, segment_start)
+    line_vector = _vector_subtract(line_end, line_start)
+    origin_delta = _vector_subtract(line_start, segment_start)
+
+    cross_value = _cross_2d(segment_vector, line_vector)
+    collinear_value = _cross_2d(origin_delta, segment_vector)
+
+    if abs(cross_value) <= epsilon and abs(collinear_value) <= epsilon:
+        return False
+    if abs(cross_value) <= epsilon:
+        return False
+
+    segment_ratio = _cross_2d(origin_delta, line_vector) / cross_value
+    line_ratio = _cross_2d(origin_delta, segment_vector) / cross_value
+    return (
+        (-epsilon <= segment_ratio <= 1.0 + epsilon)
+        and (-epsilon <= line_ratio <= 1.0 + epsilon)
+    )
+
+
+def _detect_line_crossing(
+    line_start: tuple[float, float],
+    line_end: tuple[float, float],
+    previous_point: tuple[float, float],
+    current_point: tuple[float, float],
+) -> Optional[str]:
+    if not _segments_intersect(previous_point, current_point, line_start, line_end):
+        return None
+
+    _, unit_normal = _line_unit_vectors(line_start, line_end)
+    motion_vector = _vector_subtract(current_point, previous_point)
+    motion_along_normal = _dot_2d(motion_vector, unit_normal)
+    if abs(motion_along_normal) <= LINE_INTERSECTION_EPSILON:
+        previous_side = _point_side(line_start, line_end, previous_point)
+        current_side = _point_side(line_start, line_end, current_point)
+        if previous_side * current_side >= 0:
+            return None
+        motion_along_normal = current_side - previous_side
+
+    return DIRECTION_NORMAL if motion_along_normal > 0 else DIRECTION_OPPOSITE
+
+
+def _line_anchor_projection(
+    event: dict,
+    unit_tangent: tuple[float, float],
+    frame_width: int,
+    frame_height: int,
+) -> float:
+    x1 = float(event.get("bbox_x1") or 0.0) / max(float(frame_width), 1.0)
+    x2 = float(event.get("bbox_x2") or 0.0) / max(float(frame_width), 1.0)
+    y2 = float(event.get("bbox_y2") or 0.0) / max(float(frame_height), 1.0)
+    anchor_point = ((x1 + x2) / 2.0, y2)
+    return _dot_2d(anchor_point, unit_tangent)
+
+
+def _close_parallel_line_pair(lines: list[CountLine | VideoCountLine]) -> bool:
+    if len(lines) != 2:
+        return False
+
+    first_tangent, first_normal = _line_unit_vectors(
+        (float(lines[0].start_x), float(lines[0].start_y)),
+        (float(lines[0].end_x), float(lines[0].end_y)),
+    )
+    second_tangent, _ = _line_unit_vectors(
+        (float(lines[1].start_x), float(lines[1].start_y)),
+        (float(lines[1].end_x), float(lines[1].end_y)),
+    )
+    tangent_alignment = abs(_dot_2d(first_tangent, second_tangent))
+    max_angle_radians = math.radians(CLOSE_LINE_PAIR_MAX_ANGLE_DEGREES)
+    if tangent_alignment < math.cos(max_angle_radians):
+        return False
+
+    gap_ratio = abs(_line_projection(lines[0], first_normal) - _line_projection(lines[1], first_normal))
+    return gap_ratio <= CLOSE_LINE_PAIR_MAX_GAP_RATIO
+
+
+def _expected_line_orders(
+    lines_by_order: dict[int, CountLine | VideoCountLine],
+    unit_normal: tuple[float, float],
+    direction: str,
+) -> tuple[int, int]:
+    ordered_line_orders = sorted(lines_by_order, key=lambda order: _line_projection(lines_by_order[order], unit_normal))
+    if direction == DIRECTION_NORMAL:
+        return ordered_line_orders[0], ordered_line_orders[1]
+    return ordered_line_orders[1], ordered_line_orders[0]
+
+
+def _match_reconciled_line_events(
+    first_events: list[dict],
+    second_events: list[dict],
+    unit_tangent: tuple[float, float],
+    frame_width: int,
+    frame_height: int,
+) -> tuple[list[tuple[dict, dict]], list[dict], list[dict]]:
+    first_ordered = sorted(first_events, key=lambda event: float(event.get("crossed_at_seconds") or 0.0))
+    second_ordered = sorted(second_events, key=lambda event: float(event.get("crossed_at_seconds") or 0.0))
+    used_second_indexes: set[int] = set()
+    pairs: list[tuple[dict, dict]] = []
+    unmatched_first: list[dict] = []
+
+    for first_event in first_ordered:
+        first_time = float(first_event.get("crossed_at_seconds") or 0.0)
+        first_projection = _line_anchor_projection(first_event, unit_tangent, frame_width, frame_height)
+        best_index: Optional[int] = None
+        best_score: Optional[float] = None
+
+        for second_index, second_event in enumerate(second_ordered):
+            if second_index in used_second_indexes:
+                continue
+
+            second_time = float(second_event.get("crossed_at_seconds") or 0.0)
+            delta_seconds = second_time - first_time
+            if delta_seconds < -0.2 or delta_seconds > CLOSE_LINE_PAIR_MAX_TIME_GAP_SECONDS:
+                continue
+
+            second_projection = _line_anchor_projection(second_event, unit_tangent, frame_width, frame_height)
+            tangent_gap = abs(second_projection - first_projection)
+            if tangent_gap > CLOSE_LINE_PAIR_MAX_TANGENT_GAP_RATIO:
+                continue
+
+            class_penalty = 0.0
+            if str(second_event.get("vehicle_class") or "") != str(first_event.get("vehicle_class") or ""):
+                class_penalty = 0.35
+            score = delta_seconds + (tangent_gap * 4.0) + class_penalty
+            if best_score is None or score < best_score:
+                best_score = score
+                best_index = second_index
+
+        if best_index is None:
+            unmatched_first.append(first_event)
+            continue
+
+        used_second_indexes.add(best_index)
+        pairs.append((first_event, second_ordered[best_index]))
+
+    unmatched_second = [
+        event
+        for second_index, event in enumerate(second_ordered)
+        if second_index not in used_second_indexes
+    ]
+    return pairs, unmatched_first, unmatched_second
+
+
+def _synthesize_line_event(
+    event: dict,
+    *,
+    target_line: CountLine | VideoCountLine,
+    time_offset_seconds: float,
+    fps: float,
+) -> dict:
+    synthesized = dict(event)
+    target_seconds = max(float(event.get("crossed_at_seconds") or 0.0) + float(time_offset_seconds), 0.0)
+    synthesized["count_line_order"] = int(target_line.line_order)
+    synthesized["count_line_name"] = target_line.name
+    synthesized["crossed_at_seconds"] = round(target_seconds, 4)
+    synthesized["crossed_at_frame"] = max(int(round(target_seconds * fps)), 1)
+    return synthesized
+
+
+def _build_track_profiles_from_overlay_frames(
+    overlay_frames: list[dict],
+    *,
+    source_width: int,
+    source_height: int,
+    master_class_lookup: dict[str, dict],
+) -> dict[int, TrackProfile]:
+    track_states: dict[int, dict] = {}
+
+    for frame in overlay_frames:
+        detections = frame.get("detections") or []
+        for detection in detections:
+            track_id = int(detection.get("track_id") or 0)
+            if track_id <= 0:
+                continue
+
+            vehicle_class = str(detection.get("vehicle_class") or "").strip().lower()
+            if not vehicle_class:
+                continue
+
+            source_label = str(
+                detection.get("source_label")
+                or detection.get("detected_label")
+                or RAW_DETECTION_LABELS.get(vehicle_class, vehicle_class)
+            ).strip().lower()
+            bbox = (
+                float(detection.get("x1") or 0.0) * max(float(source_width), 1.0),
+                float(detection.get("y1") or 0.0) * max(float(source_height), 1.0),
+                float(detection.get("x2") or 0.0) * max(float(source_width), 1.0),
+                float(detection.get("y2") or 0.0) * max(float(source_height), 1.0),
+            )
+            confidence = float(detection.get("confidence") or 0.0)
+            evidence_score = _detection_evidence_score(vehicle_class, confidence, bbox)
+            state = track_states.setdefault(
+                track_id,
+                {
+                    "class_scores": {},
+                    "label_scores": {},
+                    "class_reference_boxes": {},
+                    "class_reference_scores": {},
+                    "class_reference_labels": {},
+                },
+            )
+            state["class_scores"][vehicle_class] = state["class_scores"].get(vehicle_class, 0.0) + evidence_score
+            state["label_scores"][source_label] = state["label_scores"].get(source_label, 0.0) + evidence_score
+
+            if evidence_score >= float(state["class_reference_scores"].get(vehicle_class, 0.0)):
+                state["class_reference_boxes"][vehicle_class] = bbox
+                state["class_reference_scores"][vehicle_class] = evidence_score
+                state["class_reference_labels"][vehicle_class] = source_label
+
+    track_profiles: dict[int, TrackProfile] = {}
+    for track_id, state in track_states.items():
+        if not state["class_scores"]:
+            continue
+
+        dominant_vehicle_class = _pick_dominant_score(state["class_scores"], VEHICLE_CLASS_CAR)
+        dominant_bbox = state["class_reference_boxes"].get(dominant_vehicle_class)
+        if dominant_bbox is None:
+            continue
+
+        dominant_source_label = str(
+            state["class_reference_labels"].get(
+                dominant_vehicle_class,
+                RAW_DETECTION_LABELS.get(dominant_vehicle_class, dominant_vehicle_class),
+            )
+        )
+        classification_result = classify_vehicle(
+            vehicle_class=dominant_vehicle_class,
+            source_label=dominant_source_label,
+            bbox=dominant_bbox,
+            frame_width=max(source_width, 1),
+            frame_height=max(source_height, 1),
+            master_class_lookup=master_class_lookup,
+        )
+        track_profiles[track_id] = TrackProfile(
+            vehicle_class=dominant_vehicle_class,
+            source_label=dominant_source_label,
+            detected_label=classification_result.raw_detected_label,
+            vehicle_type_code=classification_result.vehicle_type_code,
+            vehicle_type_label=classification_result.vehicle_type_label,
+            golongan_code=classification_result.golongan_code,
+            golongan_label=classification_result.golongan_label,
+        )
+
+    return track_profiles
+
+
+def _build_report_events_from_overlay_frames(
+    overlay_frames: list[dict],
+    *,
+    lines: list[CountLine | VideoCountLine],
+    source_width: int,
+    source_height: int,
+    master_class_lookup: dict[str, dict],
+) -> list[dict]:
+    if not overlay_frames or not lines:
+        return []
+
+    normalized_line_segments = [
+        (
+            (float(line.start_x), float(line.start_y)),
+            (float(line.end_x), float(line.end_y)),
+        )
+        for line in lines
+    ]
+    track_profiles = _build_track_profiles_from_overlay_frames(
+        overlay_frames,
+        source_width=source_width,
+        source_height=source_height,
+        master_class_lookup=master_class_lookup,
+    )
+
+    counted_track_lines: dict[int, set[int]] = {}
+    track_last_points: dict[int, tuple[float, float]] = {}
+    report_events: list[dict] = []
+
+    ordered_frames = sorted(
+        overlay_frames,
+        key=lambda frame: (
+            int(frame.get("source_frame") or 0),
+            float(frame.get("time_seconds") or 0.0),
+        ),
+    )
+
+    for frame in ordered_frames:
+        time_seconds = float(frame.get("time_seconds") or 0.0)
+        source_frame = int(frame.get("source_frame") or 0)
+        detections = frame.get("detections") or []
+
+        for detection in detections:
+            if detection is None:
+                continue
+
+            track_id = int(detection.get("track_id") or 0)
+            x1_ratio = float(detection.get("x1") or 0.0)
+            y1_ratio = float(detection.get("y1") or 0.0)
+            x2_ratio = float(detection.get("x2") or 0.0)
+            y2_ratio = float(detection.get("y2") or 0.0)
+            point = ((x1_ratio + x2_ratio) / 2.0, y2_ratio)
+            previous_point = track_last_points.get(track_id)
+
+            if previous_point is not None:
+                counted_lines = counted_track_lines.setdefault(track_id, set())
+                stable_vehicle_class = str(detection.get("vehicle_class") or "")
+                stable_source_label = str(detection.get("source_label") or stable_vehicle_class)
+                stable_confidence = float(detection.get("confidence") or 0.0)
+                source_bbox = (
+                    x1_ratio * max(float(source_width), 1.0),
+                    y1_ratio * max(float(source_height), 1.0),
+                    x2_ratio * max(float(source_width), 1.0),
+                    y2_ratio * max(float(source_height), 1.0),
+                )
+                classification_result = classify_vehicle(
+                    vehicle_class=stable_vehicle_class,
+                    source_label=stable_source_label,
+                    bbox=source_bbox,
+                    frame_width=max(source_width, 1),
+                    frame_height=max(source_height, 1),
+                    master_class_lookup=master_class_lookup,
+                )
+                track_profile = track_profiles.get(track_id)
+                final_vehicle_class = track_profile.vehicle_class if track_profile else stable_vehicle_class
+                final_source_label = track_profile.source_label if track_profile else stable_source_label
+                final_detected_label = track_profile.detected_label if track_profile else classification_result.raw_detected_label
+                final_vehicle_type_code = track_profile.vehicle_type_code if track_profile else classification_result.vehicle_type_code
+                final_vehicle_type_label = track_profile.vehicle_type_label if track_profile else classification_result.vehicle_type_label
+                final_golongan_code = track_profile.golongan_code if track_profile else classification_result.golongan_code
+                final_golongan_label = track_profile.golongan_label if track_profile else classification_result.golongan_label
+
+                for line, (line_start, line_end) in zip(lines, normalized_line_segments):
+                    line_order = int(line.line_order)
+                    if line_order in counted_lines:
+                        continue
+
+                    direction = _detect_line_crossing(line_start, line_end, previous_point, point)
+                    if not direction:
+                        continue
+
+                    counted_lines.add(line_order)
+                    report_events.append(
+                        {
+                            "track_id": track_id,
+                            "vehicle_class": final_vehicle_class,
+                            "detected_label": final_detected_label,
+                            "vehicle_type_code": final_vehicle_type_code,
+                            "vehicle_type_label": final_vehicle_type_label,
+                            "golongan_code": final_golongan_code,
+                            "golongan_label": final_golongan_label,
+                            "source_label": final_source_label,
+                            "count_line_order": line_order,
+                            "count_line_name": line.name,
+                            "direction": direction,
+                            "crossed_at_seconds": time_seconds,
+                            "crossed_at_frame": source_frame,
+                            "confidence": stable_confidence,
+                            "speed_kph": None,
+                            "bbox_x1": source_bbox[0],
+                            "bbox_y1": source_bbox[1],
+                            "bbox_x2": source_bbox[2],
+                            "bbox_y2": source_bbox[3],
+                        }
+                    )
+
+            track_last_points[track_id] = point
+
+    return report_events
+
+
+def _reconcile_close_parallel_line_events(
+    events: list[dict],
+    *,
+    lines: list[CountLine | VideoCountLine],
+    frame_width: int,
+    frame_height: int,
+    fps: float,
+) -> list[dict]:
+    if len(events) == 0 or not _close_parallel_line_pair(lines):
+        return events
+
+    lines_by_order = {int(line.line_order): line for line in lines}
+    if len(lines_by_order) != 2:
+        return events
+
+    first_line = lines[0]
+    unit_tangent, unit_normal = _line_unit_vectors(
+        (float(first_line.start_x), float(first_line.start_y)),
+        (float(first_line.end_x), float(first_line.end_y)),
+    )
+
+    preserved_events: list[dict] = []
+    events_by_group: dict[tuple[int, str], list[dict]] = {}
+    for event in events:
+        line_order = int(event.get("count_line_order") or 0)
+        direction = str(event.get("direction") or "")
+        if line_order not in lines_by_order or direction not in {DIRECTION_NORMAL, DIRECTION_OPPOSITE}:
+            preserved_events.append(event)
+            continue
+        events_by_group.setdefault((line_order, direction), []).append(event)
+
+    reconciled_events = list(preserved_events)
+    match_results: dict[str, tuple[tuple[int, int], list[tuple[dict, dict]], list[dict], list[dict]]] = {}
+    all_delta_seconds: list[float] = []
+
+    for direction in (DIRECTION_NORMAL, DIRECTION_OPPOSITE):
+        first_order, second_order = _expected_line_orders(lines_by_order, unit_normal, direction)
+        first_events = events_by_group.get((first_order, direction), [])
+        second_events = events_by_group.get((second_order, direction), [])
+        pairs, unmatched_first, unmatched_second = _match_reconciled_line_events(
+            first_events,
+            second_events,
+            unit_tangent=unit_tangent,
+            frame_width=frame_width,
+            frame_height=frame_height,
+        )
+        match_results[direction] = ((first_order, second_order), pairs, unmatched_first, unmatched_second)
+        all_delta_seconds.extend(
+            max(float(second_event.get("crossed_at_seconds") or 0.0) - float(first_event.get("crossed_at_seconds") or 0.0), 0.0)
+            for first_event, second_event in pairs
+        )
+
+    default_delta_seconds = (
+        max(float(sorted(all_delta_seconds)[len(all_delta_seconds) // 2]), 0.0)
+        if all_delta_seconds
+        else min(CLOSE_LINE_PAIR_MAX_TIME_GAP_SECONDS / 2.0, 1.0)
+    )
+    if default_delta_seconds <= 0:
+        default_delta_seconds = min(CLOSE_LINE_PAIR_MAX_TIME_GAP_SECONDS / 2.0, 1.0)
+
+    for direction in (DIRECTION_NORMAL, DIRECTION_OPPOSITE):
+        (first_order, second_order), pairs, unmatched_first, unmatched_second = match_results[direction]
+        first_events = events_by_group.get((first_order, direction), [])
+        second_events = events_by_group.get((second_order, direction), [])
+        if not first_events and not second_events:
+            continue
+
+        delta_seconds_samples = [
+            max(float(second_event.get("crossed_at_seconds") or 0.0) - float(first_event.get("crossed_at_seconds") or 0.0), 0.0)
+            for first_event, second_event in pairs
+        ]
+        median_delta_seconds = (
+            max(float(sorted(delta_seconds_samples)[len(delta_seconds_samples) // 2]), 0.0)
+            if delta_seconds_samples
+            else default_delta_seconds
+        )
+        if median_delta_seconds <= 0:
+            median_delta_seconds = default_delta_seconds
+
+        reconciled_events.extend(first_events)
+        reconciled_events.extend(second_events)
+
+        if len(first_events) > len(second_events):
+            deficit = len(first_events) - len(second_events)
+            source_events = sorted(
+                unmatched_first,
+                key=lambda event: float(event.get("confidence") or 0.0),
+                reverse=True,
+            )
+            for source_event in source_events[:deficit]:
+                reconciled_events.append(
+                    _synthesize_line_event(
+                        source_event,
+                        target_line=lines_by_order[second_order],
+                        time_offset_seconds=median_delta_seconds,
+                        fps=fps,
+                    )
+                )
+        elif len(second_events) > len(first_events):
+            deficit = len(second_events) - len(first_events)
+            source_events = sorted(
+                unmatched_second,
+                key=lambda event: float(event.get("confidence") or 0.0),
+                reverse=True,
+            )
+            for source_event in source_events[:deficit]:
+                reconciled_events.append(
+                    _synthesize_line_event(
+                        source_event,
+                        target_line=lines_by_order[first_order],
+                        time_offset_seconds=-median_delta_seconds,
+                        fps=fps,
+                    )
+                )
+
+    return reconciled_events
 
 
 def _load_count_lines(db, video: VideoUpload, site: Site) -> list[CountLine | VideoCountLine]:
@@ -986,66 +1687,53 @@ def _draw_overlay(
     line_colors = [(0, 255, 255), (255, 255, 0)]
     for index, (line_start, line_end) in enumerate(line_segments):
         cv2.line(frame, line_start, line_end, line_colors[index % len(line_colors)], 2)
-    overlay_y = 30
-    cv2.putText(frame, "Vehicle Analysis", (20, overlay_y), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (30, 255, 30), 2)
-    overlay_y += 28
+
+    overlay_x = 18
+    overlay_y = 18
+    panel_width = 355
+    panel_height = 128
+    panel = frame.copy()
+    cv2.rectangle(
+        panel,
+        (overlay_x, overlay_y),
+        (overlay_x + panel_width, overlay_y + panel_height),
+        (12, 28, 46),
+        thickness=-1,
+    )
+    cv2.addWeighted(panel, 0.55, frame, 0.45, 0, frame)
+
+    title_y = overlay_y + 24
+    cv2.putText(frame, "Vehicle Analysis", (overlay_x + 12, title_y), cv2.FONT_HERSHEY_SIMPLEX, 0.68, (38, 255, 120), 2)
     progress_text = f"Frame {processed_frames}/{total_frames or '-'}"
-    cv2.putText(frame, progress_text, (20, overlay_y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
-    overlay_y += 24
-    for code, payload in master_class_lookup.items():
-        text = f"{payload['label']}: {counts_by_golongan.get(code, 0)}"
-        cv2.putText(frame, text, (20, overlay_y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
-        overlay_y += 22
+    cv2.putText(frame, progress_text, (overlay_x + 12, title_y + 22), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (255, 255, 255), 1)
 
+    legend_x = overlay_x + 12
+    legend_y = title_y + 46
+    for index in range(len(line_segments)):
+        line_color = line_colors[index % len(line_colors)]
+        cv2.line(frame, (legend_x, legend_y), (legend_x + 18, legend_y), line_color, 3)
+        cv2.putText(
+            frame,
+            f"L{index + 1}",
+            (legend_x + 26, legend_y + 4),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.46,
+            (255, 255, 255),
+            1,
+        )
+        legend_x += 56
 
-def _classify_golongan(
-    vehicle_class: str,
-    bbox: tuple[float, float, float, float],
-    frame_width: int,
-    frame_height: int,
-    master_class_lookup: dict[str, dict],
-) -> tuple[str, str, str]:
-    def golongan_label(code: str) -> str:
-        payload = master_class_lookup.get(code) or {}
-        return str(payload.get("label") or code)
-
-    x1, y1, x2, y2 = bbox
-    box_width = max(x2 - x1, 1.0)
-    box_height = max(y2 - y1, 1.0)
-    area_ratio = (box_width * box_height) / max(float(frame_width * frame_height), 1.0)
-    aspect_ratio = box_width / box_height
-
-    if vehicle_class == VEHICLE_CLASS_MOTORCYCLE:
-        return (DETECTED_TYPE_LABELS[VEHICLE_CLASS_MOTORCYCLE], GOLONGAN_I, golongan_label(GOLONGAN_I))
-    if vehicle_class == VEHICLE_CLASS_CAR:
-        return (DETECTED_TYPE_LABELS[VEHICLE_CLASS_CAR], GOLONGAN_I, golongan_label(GOLONGAN_I))
-    if vehicle_class == VEHICLE_CLASS_BUS:
-        return (DETECTED_TYPE_LABELS[VEHICLE_CLASS_BUS], GOLONGAN_I, golongan_label(GOLONGAN_I))
-
-    if vehicle_class != VEHICLE_CLASS_TRUCK:
-        return (vehicle_class, GOLONGAN_I, golongan_label(GOLONGAN_I))
-
-    if area_ratio < 0.025:
-        golongan = GOLONGAN_I
-    elif area_ratio < 0.05:
-        golongan = GOLONGAN_II
-    elif area_ratio < 0.085:
-        golongan = GOLONGAN_III
-    elif area_ratio < 0.13:
-        golongan = GOLONGAN_IV
-    else:
-        golongan = GOLONGAN_V
-
-    if aspect_ratio > 2.2:
-        golongan = {
-            GOLONGAN_I: GOLONGAN_II,
-            GOLONGAN_II: GOLONGAN_III,
-            GOLONGAN_III: GOLONGAN_IV,
-            GOLONGAN_IV: GOLONGAN_V,
-            GOLONGAN_V: GOLONGAN_V,
-        }[golongan]
-
-    return (DETECTED_TYPE_LABELS[VEHICLE_CLASS_TRUCK], golongan, golongan_label(golongan))
+    counts_x = overlay_x + 12
+    counts_y = legend_y + 26
+    column_width = 106
+    row_height = 18
+    for index, code in enumerate(master_class_lookup):
+        column_index = index // 4
+        row_index = index % 4
+        text_x = counts_x + (column_index * column_width)
+        text_y = counts_y + (row_index * row_height)
+        text = f"{code}: {counts_by_golongan.get(code, 0)}"
+        cv2.putText(frame, text, (text_x, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.47, (255, 255, 255), 1)
 
 
 def _is_detection_candidate(
@@ -1061,8 +1749,10 @@ def _is_detection_candidate(
     box_height = max(y2 - y1, 1.0)
     area_ratio = (box_width * box_height) / max(float(frame_width * frame_height), 1.0)
 
-    if vehicle_class == VEHICLE_CLASS_MOTORCYCLE:
+    if vehicle_class in {VEHICLE_CLASS_BICYCLE, VEHICLE_CLASS_MOTORCYCLE}:
         minimum_confidence = max(config.confidence_threshold, config.motorcycle_min_confidence)
+    elif vehicle_class == VEHICLE_CLASS_BUS:
+        minimum_confidence = max(config.confidence_threshold, max(config.vehicle_min_confidence - BUS_CONFIDENCE_RELAXATION, 0.0))
     elif vehicle_class in {VEHICLE_CLASS_CAR, VEHICLE_CLASS_BUS, VEHICLE_CLASS_TRUCK}:
         minimum_confidence = max(config.confidence_threshold, config.vehicle_min_confidence)
     else:

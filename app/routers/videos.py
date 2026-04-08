@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session, joinedload
 from app.auth import get_current_user
 from app.config import get_settings
 from app.constants import (
-    DETECTED_TYPE_LABELS,
     JOB_STATUS_COMPLETED,
     JOB_STATUS_PENDING,
     JOB_STATUS_PROCESSING,
@@ -61,6 +60,7 @@ from app.services.storage import (
     save_upload_file,
     thumbnail_relative_path_for,
 )
+from app.services.vehicle_classification import normalize_raw_detected_label
 from app.services.video_metadata import probe_video
 from app.services.video_conversion import (
     is_video_conversion_ready,
@@ -183,13 +183,6 @@ def _serialize_count_line(video_id: UUID, line: CountLine | VideoCountLine, sour
     return VideoCountLineRead.model_validate(payload)
 
 
-def _normalized_detected_label(vehicle_class: str, detected_label: Optional[str]) -> Optional[str]:
-    normalized_vehicle_class = str(vehicle_class or "").strip().lower()
-    if normalized_vehicle_class in DETECTED_TYPE_LABELS:
-        return DETECTED_TYPE_LABELS[normalized_vehicle_class]
-    return detected_label
-
-
 def _serialize_golongan_total(row: AnalysisGolonganTotal, master_class_map: dict[str, str]) -> GolonganTotalRead:
     payload = {
         "id": row.id,
@@ -208,7 +201,10 @@ def _serialize_vehicle_event(row: VehicleEvent, master_class_map: dict[str, str]
         "sequence_no": row.sequence_no,
         "track_id": row.track_id,
         "vehicle_class": row.vehicle_class,
-        "detected_label": _normalized_detected_label(row.vehicle_class, row.detected_label),
+        "detected_label": row.detected_label or normalize_raw_detected_label(row.vehicle_class, row.source_label),
+        "source_label": row.source_label,
+        "vehicle_type_code": row.vehicle_type_code,
+        "vehicle_type_label": row.vehicle_type_label,
         "golongan_code": row.golongan_code,
         "golongan_label": master_class_map.get(row.golongan_code, row.golongan_label),
         "count_line_order": row.count_line_order,

@@ -29,6 +29,12 @@ ALTER TABLE vehicle_events
 ADD COLUMN IF NOT EXISTS detected_label VARCHAR(100);
 
 ALTER TABLE vehicle_events
+ADD COLUMN IF NOT EXISTS vehicle_type_code VARCHAR(100);
+
+ALTER TABLE vehicle_events
+ADD COLUMN IF NOT EXISTS vehicle_type_label VARCHAR(255);
+
+ALTER TABLE vehicle_events
 ADD COLUMN IF NOT EXISTS golongan_code VARCHAR(50);
 
 ALTER TABLE vehicle_events
@@ -48,28 +54,47 @@ WHERE ve.id = ranked_events.id
 
 UPDATE vehicle_events
 SET detected_label = CASE vehicle_class
-    WHEN 'motorcycle' THEN 'Sepeda Motor'
-    WHEN 'car' THEN 'Sedan / Jeep / SUV / Pick Up Kecil'
-    WHEN 'bus' THEN 'Bus Kecil'
-    ELSE 'Truk'
+    WHEN 'motorcycle' THEN 'motorcycle'
+    WHEN 'bus' THEN 'bus'
+    WHEN 'truck' THEN 'truck'
+    ELSE 'car'
 END
 WHERE detected_label IS NULL;
 
 UPDATE vehicle_events
-SET golongan_code = CASE vehicle_class
-    WHEN 'truck' THEN 'golongan_2'
-    ELSE 'golongan_1'
+SET vehicle_type_code = CASE vehicle_class
+    WHEN 'motorcycle' THEN 'motorcycle_three_wheeler'
+    WHEN 'bus' THEN 'small_bus'
+    WHEN 'truck' THEN 'light_truck_2_axle'
+    ELSE 'passenger_car'
+END
+WHERE vehicle_type_code IS NULL;
+
+UPDATE vehicle_events
+SET vehicle_type_label = CASE vehicle_type_code
+    WHEN 'motorcycle_three_wheeler' THEN 'motorcycle'
+    WHEN 'small_bus' THEN 'small bus'
+    WHEN 'light_truck_2_axle' THEN 'light 2-axle truck'
+    ELSE 'car (sedan, jeep, station wagon)'
+END
+WHERE vehicle_type_label IS NULL;
+
+UPDATE vehicle_events
+SET golongan_code = CASE vehicle_type_code
+    WHEN 'motorcycle_three_wheeler' THEN '1'
+    WHEN 'small_bus' THEN '5a'
+    WHEN 'light_truck_2_axle' THEN '6a'
+    ELSE '2'
 END
 WHERE golongan_code IS NULL;
 
 UPDATE vehicle_events
 SET golongan_label = CASE golongan_code
-    WHEN 'golongan_1' THEN 'Golongan I'
-    WHEN 'golongan_2' THEN 'Golongan II'
-    WHEN 'golongan_3' THEN 'Golongan III'
-    WHEN 'golongan_4' THEN 'Golongan IV'
-    WHEN 'golongan_5' THEN 'Golongan V'
-    ELSE 'Golongan I'
+    WHEN '1' THEN 'Motorcycle / 3-wheel vehicle'
+    WHEN '2' THEN 'Sedan / jeep / station wagon'
+    WHEN '5a' THEN 'Small bus'
+    WHEN '6a' THEN 'Light 2-axle truck'
+    ELSE 'Sedan / jeep / station wagon'
 END
 WHERE golongan_label IS NULL;
 

@@ -117,8 +117,8 @@ def master_classes_page(request: Request, user: Optional[User] = Depends(get_cur
         request,
         "pages/master_classes.html",
         user,
-        page_title="Master Class",
-        page_subtitle="Manage the class labels and descriptions used in analysis results.",
+        page_title="Master Vehicle Classes",
+        page_subtitle="Manage the official vehicle class codes, labels, and descriptions used in analysis results.",
         active_nav="settings-master-classes",
     )
 

@@ -19,98 +19,175 @@ JOB_STATUS_FAILED = "failed"
 DIRECTION_NORMAL = "normal"
 DIRECTION_OPPOSITE = "opposite"
 
+VEHICLE_CLASS_BICYCLE = "bicycle"
 VEHICLE_CLASS_MOTORCYCLE = "motorcycle"
 VEHICLE_CLASS_CAR = "car"
 VEHICLE_CLASS_BUS = "bus"
 VEHICLE_CLASS_TRUCK = "truck"
 
-TRACKABLE_CLASS_IDS = (2, 3, 5, 7)
+TRACKABLE_CLASS_IDS = (1, 2, 3, 5, 7)
 
 COCO_CLASS_TO_VEHICLE_CLASS = {
+    1: VEHICLE_CLASS_BICYCLE,
     2: VEHICLE_CLASS_CAR,
     3: VEHICLE_CLASS_MOTORCYCLE,
     5: VEHICLE_CLASS_BUS,
     7: VEHICLE_CLASS_TRUCK,
 }
 
-GOLONGAN_I = "golongan_1"
-GOLONGAN_II = "golongan_2"
-GOLONGAN_III = "golongan_3"
-GOLONGAN_IV = "golongan_4"
-GOLONGAN_V = "golongan_5"
-
-GOLONGAN_LABELS = OrderedDict(
+RAW_DETECTION_LABELS = OrderedDict(
     [
-        (GOLONGAN_I, "Class I"),
-        (GOLONGAN_II, "Class II"),
-        (GOLONGAN_III, "Class III"),
-        (GOLONGAN_IV, "Class IV"),
-        (GOLONGAN_V, "Class V"),
+        (VEHICLE_CLASS_BICYCLE, "bicycle"),
+        (VEHICLE_CLASS_MOTORCYCLE, "motorcycle"),
+        (VEHICLE_CLASS_CAR, "car"),
+        (VEHICLE_CLASS_BUS, "bus"),
+        (VEHICLE_CLASS_TRUCK, "truck"),
     ]
 )
 
 VEHICLE_CLASS_LABELS = OrderedDict(
     [
+        (VEHICLE_CLASS_BICYCLE, "Bicycle / non-motorized"),
         (VEHICLE_CLASS_MOTORCYCLE, "Motorcycle"),
-        (VEHICLE_CLASS_CAR, "Car / SUV / Small Pickup"),
+        (VEHICLE_CLASS_CAR, "Car"),
         (VEHICLE_CLASS_BUS, "Bus"),
         (VEHICLE_CLASS_TRUCK, "Truck"),
+    ]
+)
+
+GOLONGAN_1 = "1"
+GOLONGAN_2 = "2"
+GOLONGAN_3 = "3"
+GOLONGAN_4 = "4"
+GOLONGAN_5A = "5a"
+GOLONGAN_5B = "5b"
+GOLONGAN_6A = "6a"
+GOLONGAN_6B = "6b"
+GOLONGAN_7A = "7a"
+GOLONGAN_7B = "7b"
+GOLONGAN_7C = "7c"
+GOLONGAN_8 = "8"
+
+GOLONGAN_LABELS = OrderedDict(
+    [
+        (GOLONGAN_1, "Motorcycle / 3-wheel vehicle"),
+        (GOLONGAN_2, "Sedan / jeep / station wagon"),
+        (GOLONGAN_3, "Medium passenger vehicle"),
+        (GOLONGAN_4, "Pickup / micro truck / delivery"),
+        (GOLONGAN_5A, "Small bus"),
+        (GOLONGAN_5B, "Large bus"),
+        (GOLONGAN_6A, "Light 2-axle truck"),
+        (GOLONGAN_6B, "Medium 2-axle truck"),
+        (GOLONGAN_7A, "3-axle truck"),
+        (GOLONGAN_7B, "Articulated truck"),
+        (GOLONGAN_7C, "Semi-trailer truck"),
+        (GOLONGAN_8, "Non-motorized vehicle"),
     ]
 )
 
 DEFAULT_MASTER_CLASSES = OrderedDict(
     [
         (
-            GOLONGAN_I,
+            GOLONGAN_1,
             {
-                "label": "Class I",
-                "description": "Sedan, jeep / SUV, small pickup, small bus, light truck, and motorcycle.",
+                "label": "Motorcycle / 3-wheel vehicle",
+                "description": "Motorcycles and 3-wheel motor vehicles.",
                 "sort_order": 1,
             },
         ),
         (
-            GOLONGAN_II,
+            GOLONGAN_2,
             {
-                "label": "Class II",
-                "description": "Large 2-axle trucks bigger than Class I vehicles.",
+                "label": "Sedan / jeep / station wagon",
+                "description": "Sedans, jeeps, and station wagons.",
                 "sort_order": 2,
             },
         ),
         (
-            GOLONGAN_III,
+            GOLONGAN_3,
             {
-                "label": "Class III",
-                "description": "Trucks with a 3-axle configuration.",
+                "label": "Medium passenger vehicle",
+                "description": "Medium passenger transport vehicles.",
                 "sort_order": 3,
             },
         ),
         (
-            GOLONGAN_IV,
+            GOLONGAN_4,
             {
-                "label": "Class IV",
-                "description": "Trucks with a 4-axle configuration.",
+                "label": "Pickup / micro truck / delivery",
+                "description": "Pickups, micro trucks, and delivery vehicles.",
                 "sort_order": 4,
             },
         ),
         (
-            GOLONGAN_V,
+            GOLONGAN_5A,
             {
-                "label": "Class V",
-                "description": "Trucks with 5 axles or more.",
+                "label": "Small bus",
+                "description": "Small buses.",
                 "sort_order": 5,
+            },
+        ),
+        (
+            GOLONGAN_5B,
+            {
+                "label": "Large bus",
+                "description": "Large buses.",
+                "sort_order": 6,
+            },
+        ),
+        (
+            GOLONGAN_6A,
+            {
+                "label": "Light 2-axle truck",
+                "description": "Light 2-axle trucks.",
+                "sort_order": 7,
+            },
+        ),
+        (
+            GOLONGAN_6B,
+            {
+                "label": "Medium 2-axle truck",
+                "description": "Medium 2-axle trucks.",
+                "sort_order": 8,
+            },
+        ),
+        (
+            GOLONGAN_7A,
+            {
+                "label": "3-axle truck",
+                "description": "3-axle trucks.",
+                "sort_order": 9,
+            },
+        ),
+        (
+            GOLONGAN_7B,
+            {
+                "label": "Articulated truck",
+                "description": "Articulated trucks.",
+                "sort_order": 10,
+            },
+        ),
+        (
+            GOLONGAN_7C,
+            {
+                "label": "Semi-trailer truck",
+                "description": "Semi-trailer trucks.",
+                "sort_order": 11,
+            },
+        ),
+        (
+            GOLONGAN_8,
+            {
+                "label": "Non-motorized vehicle",
+                "description": "Non-motorized vehicles.",
+                "sort_order": 12,
             },
         ),
     ]
 )
 
+MASTER_CLASS_CODES = tuple(DEFAULT_MASTER_CLASSES.keys())
 GOLONGAN_DESCRIPTIONS = {code: item["description"] for code, item in DEFAULT_MASTER_CLASSES.items()}
-
-DETECTED_TYPE_LABELS = {
-    VEHICLE_CLASS_MOTORCYCLE: "motorcycle",
-    VEHICLE_CLASS_CAR: "car (sedan, jeep, suv, pick up kecil)",
-    VEHICLE_CLASS_BUS: "bus",
-    VEHICLE_CLASS_TRUCK: "truck",
-}
 
 DEFAULT_GLOBAL_CONFIDENCE = 0.12
 DEFAULT_MOTORCYCLE_MIN_CONFIDENCE = 0.12

@@ -2,7 +2,7 @@
   {% set settings_active = active_nav and active_nav.startswith("settings") %}
   <div class="container-xxl app-topbar d-flex flex-wrap align-items-center justify-content-between gap-5">
     <div class="app-topbar-brand-group">
-      <div class="app-topbar-badge">NC</div>
+      <div class="app-topbar-badge" aria-hidden="true">NC</div>
       <div>
         <div class="app-topbar-brand fs-3">NiceCount</div>
         <div class="app-topbar-subtitle">Traffic Video Analysis Platform</div>
@@ -31,7 +31,7 @@
             Detection Thresholds
           </a>
           <a class="dropdown-item app-topbar-dropdown-item{% if active_nav == 'settings-master-classes' %} active{% endif %}" href="/settings/master-classes">
-            Master Class
+            Master Vehicle Classes
           </a>
           <a class="dropdown-item app-topbar-dropdown-item{% if active_nav == 'settings-gpu-audit' %} active{% endif %}" href="/settings/gpu-audit">
             GPU Audit

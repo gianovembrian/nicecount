@@ -9,14 +9,33 @@ from app.constants import DEFAULT_MASTER_CLASSES
 from app.models import MasterClass
 
 
+def _is_placeholder_label(code: str, label: str | None) -> bool:
+    normalized = str(label or "").strip().lower()
+    return normalized in {
+        "",
+        f"class {code.lower()}",
+        f"golongan {code.lower()}",
+        f"kelas {code.lower()}",
+    }
+
+
 def get_or_create_master_classes(db: Session) -> list[MasterClass]:
     rows = list(db.scalars(select(MasterClass).order_by(MasterClass.sort_order.asc(), MasterClass.code.asc())))
     row_map = {row.code: row for row in rows}
-    created = False
+    changed = False
 
     for code, payload in DEFAULT_MASTER_CLASSES.items():
         row = row_map.get(code)
         if row:
+            if row.sort_order != payload["sort_order"]:
+                row.sort_order = payload["sort_order"]
+                changed = True
+            if _is_placeholder_label(code, row.label):
+                row.label = payload["label"]
+                changed = True
+            if not (row.description or "").strip():
+                row.description = payload["description"]
+                changed = True
             continue
         row = MasterClass(
             code=code,
@@ -25,9 +44,9 @@ def get_or_create_master_classes(db: Session) -> list[MasterClass]:
             sort_order=payload["sort_order"],
         )
         db.add(row)
-        created = True
+        changed = True
 
-    if created:
+    if changed:
         db.commit()
 
     return list(db.scalars(select(MasterClass).order_by(MasterClass.sort_order.asc(), MasterClass.code.asc())))

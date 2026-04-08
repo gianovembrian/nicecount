@@ -19,12 +19,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   const videoPlayer = document.getElementById("analysisVideoPlayer");
   const overlayCanvas = document.getElementById("analysisOverlayCanvas");
   const overlayContext = overlayCanvas.getContext("2d");
+  const overlayMath = window.AnalysisOverlayMath || {};
   const videoTitle = document.getElementById("analysisVideoTitle");
   const videoDescription = document.getElementById("analysisVideoDescription");
   const previewMode = document.getElementById("analysisPreviewMode");
   const previewHint = document.getElementById("analysisPreviewHint");
+  const analysisTotalSummary = document.getElementById("analysisTotalSummary");
+  const analysisMetricsGrid = document.getElementById("analysisMetricsGrid");
   const eventsBody = document.getElementById("analysisEventsBody");
   const alertBox = document.getElementById("analysisAlert");
+  const exportAnalysisExcelButton = document.getElementById("exportAnalysisExcelButton");
   const clearAnalysisLogsButton = document.getElementById("clearAnalysisLogsButton");
   const analysisLineTabsShell = document.getElementById("analysisLineTabsShell");
   const analysisLineTabs = document.getElementById("analysisLineTabs");
@@ -34,13 +38,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   const analysisVideoPickerBody = document.getElementById("analysisVideoPickerBody");
   const videoPickerModal = window.bootstrap ? window.bootstrap.Modal.getOrCreateInstance(videoPickerModalElement) : null;
 
-  const golonganCodes = ["golongan_1", "golongan_2", "golongan_3", "golongan_4", "golongan_5"];
-  const detectedTypeLabels = {
-    motorcycle: "motorcycle",
-    car: "car (sedan, jeep, suv, pick up kecil)",
-    bus: "bus",
-    truck: "truck",
-  };
+  const METRIC_CARD_THEMES = [
+    "metric-card-success",
+    "metric-card-warning",
+    "metric-card-primary",
+    "metric-card-info",
+    "metric-card-danger",
+    "metric-card-dark",
+  ];
   const state = {
     videos: [],
     selectedVideoId: null,
@@ -63,6 +68,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     lastAnalysisPayload: null,
     pendingSeekSeconds: null,
     statusClockHandle: null,
+    masterClasses: [],
   };
 
   const PICKER_ICONS = {
@@ -224,39 +230,82 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function resetMetrics() {
-    golonganCodes.forEach((code) => {
-      const metric = document.getElementById(`metric_${code}`);
-      if (metric) {
-        metric.textContent = "0";
-      }
-    });
-    document.getElementById("metric_total").textContent = "0";
+    analysisTotalSummary.innerHTML = "";
+    analysisMetricsGrid.innerHTML = "";
+    state.masterClasses = [];
   }
 
   function renderMasterClassCards(masterClasses) {
-    const items = Array.isArray(masterClasses) ? masterClasses : [];
-    items.forEach((item) => {
+    state.masterClasses = Array.isArray(masterClasses)
+      ? masterClasses
+        .slice()
+        .sort((left, right) => Number(left.sort_order || 0) - Number(right.sort_order || 0))
+      : [];
+
+    if (!state.masterClasses.length) {
+      resetMetrics();
+      return;
+    }
+
+    analysisTotalSummary.innerHTML = `
+      <div class="card analysis-total-card">
+        <div class="card-body analysis-total-card-body">
+          <div class="analysis-total-card-copy">
+            <div class="analysis-total-card-kicker">Overall Total</div>
+            <div class="analysis-total-card-title">Total detected vehicles</div>
+            <div class="analysis-total-card-note">The accumulated vehicle count from the selected analysis result.</div>
+          </div>
+          <div class="analysis-total-card-metric">
+            <div id="metric_total" class="analysis-total-card-value">0</div>
+            <div class="analysis-total-card-pill">vehicles</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    analysisMetricsGrid.innerHTML = state.masterClasses.map((item, index) => `
+      <div class="col-xxl-2 col-xl-3 col-md-4 col-sm-6">
+        <div class="card metric-card ${METRIC_CARD_THEMES[index % METRIC_CARD_THEMES.length]} h-100">
+          <div class="card-body metric-card-body">
+            <div class="d-flex align-items-center justify-content-between gap-3 mb-2">
+              <div id="metric_title_${item.code}" class="metric-card-title mb-0">${app.escapeHtml(item.label || item.code)}</div>
+              <span class="badge badge-light">${app.escapeHtml(String(item.code || ""))}</span>
+            </div>
+            <div id="metric_${item.code}" class="metric-value">0</div>
+            <div id="metric_note_${item.code}" class="metric-card-note">${app.escapeHtml(item.description || "-")}</div>
+            <div class="metric-card-bar" aria-hidden="true"><span></span></div>
+          </div>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  function updateMetricValues(totals, totalVehicleCount) {
+    state.masterClasses.forEach((item) => {
       const code = String(item.code || "");
-      if (!code) {
-        return;
-      }
-      const titleElement = document.getElementById(`metric_title_${code}`);
-      const noteElement = document.getElementById(`metric_note_${code}`);
-      if (titleElement) {
-        titleElement.textContent = item.label || code;
-      }
-      if (noteElement) {
-        noteElement.textContent = item.description || "-";
+      const metric = document.getElementById(`metric_${code}`);
+      if (metric) {
+        metric.textContent = String(totals[code] || 0);
       }
     });
+    const totalMetric = document.getElementById("metric_total");
+    if (totalMetric) {
+      totalMetric.textContent = String(totalVehicleCount || 0);
+    }
   }
 
   function formatDetectedType(event) {
-    const normalizedVehicleClass = String(event && event.vehicle_class ? event.vehicle_class : "").trim().toLowerCase();
-    if (detectedTypeLabels[normalizedVehicleClass]) {
-      return detectedTypeLabels[normalizedVehicleClass];
+    if (event && event.vehicle_type_label) {
+      return event.vehicle_type_label;
     }
-    return event && event.detected_label ? event.detected_label : (normalizedVehicleClass || "-");
+    if (event && event.detected_label) {
+      return event.detected_label;
+    }
+    if (event && event.source_label) {
+      return event.source_label;
+    }
+    const normalizedVehicleClass = String(event && event.vehicle_class ? event.vehicle_class : "").trim().toLowerCase();
+    return normalizedVehicleClass || "-";
   }
 
   function formatCrossedTimeDisplay(seconds) {
@@ -762,6 +811,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     return true;
   }
 
+  function getDisplayedVideoBox() {
+    const rect = videoPlayer.getBoundingClientRect();
+    if (!rect.width || !rect.height) {
+      return null;
+    }
+
+    if (typeof overlayMath.getVideoContentBox !== "function") {
+      return {
+        left: 0,
+        top: 0,
+        width: rect.width,
+        height: rect.height,
+      };
+    }
+
+    return overlayMath.getVideoContentBox(rect.width, rect.height, videoPlayer.videoWidth, videoPlayer.videoHeight);
+  }
+
   function overlaySourceStepSeconds() {
     const performance = state.overlayData && state.overlayData.analysis && state.overlayData.analysis.performance
       ? state.overlayData.analysis.performance
@@ -905,37 +972,68 @@ document.addEventListener("DOMContentLoaded", async () => {
     return interpolateDetections(frameWindow.previous, frameWindow.next, timeSeconds);
   }
 
-  function drawOverlayLines(canvasWidth, canvasHeight) {
+  function drawOverlayLines(contentBox) {
     const analysis = state.overlayData && state.overlayData.analysis ? state.overlayData.analysis : null;
     const lines = analysis && Array.isArray(analysis.lines) && analysis.lines.length
       ? analysis.lines
       : (analysis && analysis.line ? [analysis.line] : []);
-    if (!lines.length) {
+    if (!lines.length || !contentBox) {
       return;
     }
 
     const colors = ["#FACC15", "#22D3EE"];
     lines.forEach((line, index) => {
+      const startPoint = typeof overlayMath.mapNormalizedPointToDisplay === "function"
+        ? overlayMath.mapNormalizedPointToDisplay({ x: line.start_x, y: line.start_y }, contentBox)
+        : {
+          x: contentBox.left + (Number(line.start_x || 0) * contentBox.width),
+          y: contentBox.top + (Number(line.start_y || 0) * contentBox.height),
+        };
+      const endPoint = typeof overlayMath.mapNormalizedPointToDisplay === "function"
+        ? overlayMath.mapNormalizedPointToDisplay({ x: line.end_x, y: line.end_y }, contentBox)
+        : {
+          x: contentBox.left + (Number(line.end_x || 0) * contentBox.width),
+          y: contentBox.top + (Number(line.end_y || 0) * contentBox.height),
+        };
       overlayContext.save();
       overlayContext.strokeStyle = colors[index % colors.length];
       overlayContext.lineWidth = 3;
       overlayContext.beginPath();
-      overlayContext.moveTo(Number(line.start_x || 0) * canvasWidth, Number(line.start_y || 0) * canvasHeight);
-      overlayContext.lineTo(Number(line.end_x || 0) * canvasWidth, Number(line.end_y || 0) * canvasHeight);
+      overlayContext.moveTo(startPoint.x, startPoint.y);
+      overlayContext.lineTo(endPoint.x, endPoint.y);
       overlayContext.stroke();
       overlayContext.restore();
     });
   }
 
-  function drawOverlayBoxes(detections, canvasWidth, canvasHeight) {
+  function drawOverlayBoxes(detections, contentBox) {
+    if (!contentBox) {
+      return;
+    }
     detections.forEach((detection) => {
-      const x1 = Number(detection.x1 || 0) * canvasWidth;
-      const y1 = Number(detection.y1 || 0) * canvasHeight;
-      const x2 = Number(detection.x2 || 0) * canvasWidth;
-      const y2 = Number(detection.y2 || 0) * canvasHeight;
-      const width = Math.max(x2 - x1, 1);
-      const height = Math.max(y2 - y1, 1);
-      const label = `${detection.track_id ?? "-"} ${detection.source_label || detection.vehicle_class} ${(Number(detection.confidence || 0) * 100).toFixed(0)}%`;
+      const box = typeof overlayMath.mapNormalizedRectToDisplay === "function"
+        ? overlayMath.mapNormalizedRectToDisplay(
+          {
+            x1: detection.x1,
+            y1: detection.y1,
+            x2: detection.x2,
+            y2: detection.y2,
+          },
+          contentBox
+        )
+        : {
+          x1: contentBox.left + (Number(detection.x1 || 0) * contentBox.width),
+          y1: contentBox.top + (Number(detection.y1 || 0) * contentBox.height),
+          x2: contentBox.left + (Number(detection.x2 || 0) * contentBox.width),
+          y2: contentBox.top + (Number(detection.y2 || 0) * contentBox.height),
+          width: Math.max((Number(detection.x2 || 0) - Number(detection.x1 || 0)) * contentBox.width, 1),
+          height: Math.max((Number(detection.y2 || 0) - Number(detection.y1 || 0)) * contentBox.height, 1),
+        };
+      const x1 = box.x1;
+      const y1 = box.y1;
+      const width = box.width;
+      const height = box.height;
+      const label = `${detection.track_id ?? "-"} ${detection.detected_label || detection.source_label || detection.vehicle_class} ${(Number(detection.confidence || 0) * 100).toFixed(0)}%`;
 
       overlayContext.save();
       overlayContext.strokeStyle = "#00E676";
@@ -944,8 +1042,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       overlayContext.font = "600 13px Inter, sans-serif";
       const textWidth = overlayContext.measureText(label).width;
-      const textX = x1;
-      const textY = Math.max(y1 - 22, 6);
+      const textX = Math.min(Math.max(x1, contentBox.left + 4), Math.max((contentBox.left + contentBox.width) - textWidth - 16, contentBox.left + 4));
+      const textY = Math.max(y1 - 22, contentBox.top + 6);
       overlayContext.fillStyle = "rgba(0, 20, 48, 0.88)";
       overlayContext.fillRect(textX, textY, textWidth + 12, 20);
       overlayContext.fillStyle = "#FFFFFF";
@@ -961,11 +1059,15 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
-    const canvasWidth = overlayCanvas.width / (window.devicePixelRatio || 1);
-    const canvasHeight = overlayCanvas.height / (window.devicePixelRatio || 1);
+    const contentBox = getDisplayedVideoBox();
+    if (!contentBox) {
+      overlayCanvas.classList.add("hidden");
+      clearOverlayCanvas();
+      return;
+    }
     clearOverlayCanvas();
-    drawOverlayLines(canvasWidth, canvasHeight);
-    drawOverlayBoxes(sampleOverlayDetections(videoPlayer.currentTime || 0), canvasWidth, canvasHeight);
+    drawOverlayLines(contentBox);
+    drawOverlayBoxes(sampleOverlayDetections(videoPlayer.currentTime || 0), contentBox);
     overlayCanvas.classList.remove("hidden");
   }
 
@@ -1027,7 +1129,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!events.length) {
       eventsBody.innerHTML = `
         <tr>
-          <td colspan="6" class="text-center text-muted py-10">No vehicles have been recorded yet.</td>
+          <td colspan="7" class="text-center text-muted py-10">No vehicles have been recorded yet.</td>
         </tr>
       `;
       return;
@@ -1046,15 +1148,148 @@ document.addEventListener("DOMContentLoaded", async () => {
             ${formatCrossedTimeDisplay(event.crossed_at_seconds)}
           </button>
         </td>
+        <td>${event.track_id ?? "-"}</td>
         <td>${app.escapeHtml(formatDetectedType(event))}</td>
-        <td><span class="badge badge-light-primary">${app.escapeHtml(event.golongan_label)}</span></td>
+        <td>
+          <div class="d-flex flex-column align-items-start gap-1">
+            <span class="badge badge-light-primary">${app.escapeHtml(String(event.golongan_code || "-"))}</span>
+            <span class="text-muted fs-8 lh-sm">${app.escapeHtml(event.golongan_label || "-")}</span>
+          </div>
+        </td>
         <td>${app.escapeHtml(event.direction)}</td>
         <td>${event.confidence ? `${(Number(event.confidence) * 100).toFixed(1)}%` : "-"}</td>
       </tr>
     `).join("");
   }
 
-  function applyPendingSeek({ autoplay = false } = {}) {
+  function getCurrentVisibleEvents() {
+    const events = state.lastAnalysisPayload && Array.isArray(state.lastAnalysisPayload.recent_events)
+      ? state.lastAnalysisPayload.recent_events
+      : [];
+    return getVisibleEvents(events);
+  }
+
+  function safeExcelCell(value) {
+    const text = String(value ?? "");
+    return app.escapeHtml(text)
+      .replace(/\n/g, "<br/>");
+  }
+
+  function buildExportFileName() {
+    const video = getSelectedVideo();
+    const baseName = String(
+      (video && (displayPlaybackFilename(video) || video.original_filename)) || "detected_vehicles"
+    )
+      .replace(/\.[^.]+$/, "")
+      .replace(/[^A-Za-z0-9_-]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 80) || "detected_vehicles";
+    const lineSuffix = state.availableLines.length > 1 && state.selectedLineOrder
+      ? `_line_${state.selectedLineOrder}`
+      : "";
+    const timestamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
+    return `${baseName}_detected_vehicles${lineSuffix}_${timestamp}.xls`;
+  }
+
+  function buildExcelHtml(events) {
+    const video = getSelectedVideo();
+    const lineLabel = state.availableLines.length > 1 && state.selectedLineOrder
+      ? formatLineDisplayName(state.selectedLineOrder)
+      : "All Lines";
+    const exportedAt = new Date().toLocaleString("en-GB", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+    const rows = events.map((event, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${safeExcelCell(formatCrossedTimeDisplay(event.crossed_at_seconds))}</td>
+        <td>${safeExcelCell(event.track_id ?? "-")}</td>
+        <td>${safeExcelCell(formatDetectedType(event))}</td>
+        <td>${safeExcelCell(String(event.golongan_code || "-"))}</td>
+        <td>${safeExcelCell(event.golongan_label || "-")}</td>
+        <td>${safeExcelCell(event.direction || "-")}</td>
+        <td>${safeExcelCell(event.confidence ? `${(Number(event.confidence) * 100).toFixed(1)}%` : "-")}</td>
+      </tr>
+    `).join("");
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #1f2937; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #d1d5db; padding: 8px 10px; vertical-align: top; }
+    th { background: #eef6ff; font-weight: 700; text-align: left; }
+    .meta { margin-bottom: 16px; }
+    .meta td { border: none; padding: 4px 0; }
+    .title { font-size: 18px; font-weight: 700; padding-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <table class="meta">
+    <tr><td class="title" colspan="2">Detected Vehicles Export</td></tr>
+    <tr><td><strong>Video</strong></td><td>${safeExcelCell((video && (displayPlaybackFilename(video) || video.original_filename)) || "-")}</td></tr>
+    <tr><td><strong>Description</strong></td><td>${safeExcelCell((video && video.description) || "-")}</td></tr>
+    <tr><td><strong>Line</strong></td><td>${safeExcelCell(lineLabel)}</td></tr>
+    <tr><td><strong>Exported At</strong></td><td>${safeExcelCell(exportedAt)}</td></tr>
+    <tr><td><strong>Total Rows</strong></td><td>${events.length}</td></tr>
+  </table>
+
+  <table>
+    <thead>
+      <tr>
+        <th>No</th>
+        <th>Time</th>
+        <th>ID</th>
+        <th>Detected Type</th>
+        <th>Class Code</th>
+        <th>Class Label</th>
+        <th>Direction</th>
+        <th>Confidence</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+    </tbody>
+  </table>
+</body>
+</html>`;
+  }
+
+  function exportVisibleEventsToExcel() {
+    const events = getCurrentVisibleEvents();
+    if (!state.selectedVideoId) {
+      app.setAlert(alertBox, "danger", "Select a video first");
+      return;
+    }
+    if (!events.length) {
+      app.setAlert(alertBox, "danger", "There is no detected vehicle data to export");
+      return;
+    }
+
+    const html = buildExcelHtml(events);
+    const blob = new Blob(["\ufeff", html], {
+      type: "application/vnd.ms-excel;charset=utf-8",
+    });
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = buildExportFileName();
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+    app.setAlert(alertBox, "success", "Detected vehicle data exported to Excel");
+  }
+
+  function applyPendingSeek() {
     if (state.pendingSeekSeconds === null || Number.isNaN(Number(state.pendingSeekSeconds))) {
       return;
     }
@@ -1066,14 +1301,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     state.pendingSeekSeconds = null;
     videoPlayer.currentTime = targetSeconds;
+    videoPlayer.pause();
     drawCurrentOverlayFrame();
-
-    if (autoplay) {
-      const playPromise = videoPlayer.play();
-      if (playPromise && typeof playPromise.catch === "function") {
-        playPromise.catch(() => {});
-      }
-    }
   }
 
   function seekPlaybackTo(seconds) {
@@ -1088,9 +1317,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     state.pendingSeekSeconds = Math.max(targetSeconds, 0);
+    if (videoShell) {
+      videoShell.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
 
     if (videoPlayer.readyState >= 1) {
-      applyPendingSeek({ autoplay: true });
+      applyPendingSeek();
       return;
     }
 
@@ -1125,13 +1360,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
     }
 
-    golonganCodes.forEach((code) => {
-      const metric = document.getElementById(`metric_${code}`);
-      if (metric) {
-        metric.textContent = String(totals[code] || 0);
-      }
-    });
-    document.getElementById("metric_total").textContent = String(totalVehicleCount);
+    updateMetricValues(totals, totalVehicleCount);
 
     videoTitle.textContent = displayPlaybackFilename(video) || video.original_filename;
     videoDescription.textContent = video.description || "No description";
@@ -1215,6 +1444,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     } else {
       setAnalysisActionButton({ mode: "start", disabled: !state.selectedVideoId });
     }
+    setButtonDisabled(exportAnalysisExcelButton, !state.selectedVideoId || !visibleEvents.length);
     setButtonDisabled(clearAnalysisLogsButton, !state.selectedVideoId || isConverting || (isRunning && !isStaleRunning));
     setRefreshButtonLoading(false);
 
@@ -1259,6 +1489,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       analysisProcessingTimeText.textContent = "00:00:00";
       setCountLinesButton.href = "/count-lines";
       setButtonDisabled(clearAnalysisLogsButton, true);
+      setButtonDisabled(exportAnalysisExcelButton, true);
       stopStatusClock();
       stopLivePreview();
       resetOverlayState();
@@ -1410,6 +1641,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     } catch (error) {
       app.setAlert(alertBox, "danger", error.message);
     }
+  });
+
+  exportAnalysisExcelButton.addEventListener("click", () => {
+    exportVisibleEventsToExcel();
   });
 
   startAnalysisButton.addEventListener("click", async () => {

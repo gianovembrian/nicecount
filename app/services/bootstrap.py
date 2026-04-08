@@ -7,11 +7,11 @@ from app.auth import hash_password, normalize_username
 from app.config import get_settings
 from app.constants import (
     DEFAULT_GLOBAL_CONFIDENCE,
-    DEFAULT_MASTER_CLASSES,
     DEFAULT_MOTORCYCLE_MIN_CONFIDENCE,
     DEFAULT_VEHICLE_MIN_CONFIDENCE,
 )
-from app.models import CountLine, DetectionSettings, MasterClass, Site, User
+from app.models import CountLine, DetectionSettings, Site, User
+from app.services.master_classes import get_or_create_master_classes
 
 
 def ensure_bootstrap_data(db: Session) -> None:
@@ -26,7 +26,7 @@ def ensure_bootstrap_data(db: Session) -> None:
     if "detection_settings" in table_names:
         _ensure_detection_settings(db)
     if "master_classes" in table_names:
-        _ensure_master_classes(db)
+        get_or_create_master_classes(db)
 
 
 def _ensure_admin_user(db: Session) -> None:
@@ -99,24 +99,3 @@ def _ensure_detection_settings(db: Session) -> None:
         )
     )
     db.commit()
-
-
-def _ensure_master_classes(db: Session) -> None:
-    existing_codes = set(db.scalars(select(MasterClass.code)))
-    created = False
-
-    for code, payload in DEFAULT_MASTER_CLASSES.items():
-        if code in existing_codes:
-            continue
-        db.add(
-            MasterClass(
-                code=code,
-                label=payload["label"],
-                description=payload["description"],
-                sort_order=payload["sort_order"],
-            )
-        )
-        created = True
-
-    if created:
-        db.commit()

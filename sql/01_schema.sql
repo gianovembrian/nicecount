@@ -29,10 +29,10 @@ CREATE TABLE IF NOT EXISTS detection_settings (
 );
 
 CREATE TABLE IF NOT EXISTS master_classes (
-    code VARCHAR(50) PRIMARY KEY CHECK (code IN ('golongan_1', 'golongan_2', 'golongan_3', 'golongan_4', 'golongan_5')),
+    code VARCHAR(50) PRIMARY KEY,
     label VARCHAR(100) NOT NULL,
     description TEXT,
-    sort_order INTEGER NOT NULL UNIQUE CHECK (sort_order BETWEEN 1 AND 5),
+    sort_order INTEGER NOT NULL UNIQUE CHECK (sort_order >= 1),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -126,9 +126,11 @@ CREATE TABLE IF NOT EXISTS vehicle_events (
     site_id UUID NOT NULL REFERENCES sites(id) ON DELETE RESTRICT,
     sequence_no INTEGER NOT NULL,
     track_id BIGINT,
-    vehicle_class VARCHAR(50) NOT NULL CHECK (vehicle_class IN ('motorcycle', 'car', 'bus', 'truck')),
+    vehicle_class VARCHAR(50) NOT NULL CHECK (vehicle_class IN ('bicycle', 'motorcycle', 'car', 'bus', 'truck')),
     detected_label VARCHAR(100),
-    golongan_code VARCHAR(50) NOT NULL CHECK (golongan_code IN ('golongan_1', 'golongan_2', 'golongan_3', 'golongan_4', 'golongan_5')),
+    vehicle_type_code VARCHAR(100),
+    vehicle_type_label VARCHAR(255),
+    golongan_code VARCHAR(50) NOT NULL REFERENCES master_classes(code) ON DELETE RESTRICT,
     golongan_label VARCHAR(100) NOT NULL,
     source_label VARCHAR(100),
     count_line_order INTEGER,
@@ -149,7 +151,7 @@ CREATE TABLE IF NOT EXISTS analysis_golongan_totals (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     video_upload_id UUID NOT NULL REFERENCES video_uploads(id) ON DELETE CASCADE,
     analysis_job_id UUID NOT NULL REFERENCES analysis_jobs(id) ON DELETE CASCADE,
-    golongan_code VARCHAR(50) NOT NULL CHECK (golongan_code IN ('golongan_1', 'golongan_2', 'golongan_3', 'golongan_4', 'golongan_5')),
+    golongan_code VARCHAR(50) NOT NULL REFERENCES master_classes(code) ON DELETE RESTRICT,
     golongan_label VARCHAR(100) NOT NULL,
     vehicle_count INTEGER NOT NULL DEFAULT 0 CHECK (vehicle_count >= 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -169,7 +171,7 @@ CREATE TABLE IF NOT EXISTS video_count_aggregates (
     bucket_started_at TIMESTAMPTZ,
     bucket_ended_at TIMESTAMPTZ,
     direction VARCHAR(50) NOT NULL CHECK (direction IN ('normal', 'opposite')),
-    vehicle_class VARCHAR(50) NOT NULL CHECK (vehicle_class IN ('motorcycle', 'car', 'bus', 'truck')),
+    vehicle_class VARCHAR(50) NOT NULL CHECK (vehicle_class IN ('bicycle', 'motorcycle', 'car', 'bus', 'truck')),
     vehicle_count INTEGER NOT NULL CHECK (vehicle_count >= 0),
     avg_speed_kph DOUBLE PRECISION,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -190,6 +192,7 @@ CREATE INDEX IF NOT EXISTS idx_video_count_lines_video_active ON video_count_lin
 CREATE INDEX IF NOT EXISTS idx_vehicle_events_video_sequence ON vehicle_events(video_upload_id, sequence_no);
 CREATE INDEX IF NOT EXISTS idx_vehicle_events_video_time ON vehicle_events(video_upload_id, crossed_at_seconds);
 CREATE INDEX IF NOT EXISTS idx_vehicle_events_video_line ON vehicle_events(video_upload_id, count_line_order, sequence_no);
+CREATE INDEX IF NOT EXISTS idx_vehicle_events_video_type ON vehicle_events(video_upload_id, vehicle_type_code);
 CREATE INDEX IF NOT EXISTS idx_analysis_golongan_totals_video_code ON analysis_golongan_totals(video_upload_id, golongan_code);
 CREATE INDEX IF NOT EXISTS idx_video_count_aggregates_video_bucket ON video_count_aggregates(video_upload_id, bucket_type, bucket_index);
 

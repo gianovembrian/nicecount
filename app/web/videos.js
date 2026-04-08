@@ -212,60 +212,74 @@ document.addEventListener("DOMContentLoaded", async () => {
     `;
   }
 
-  function renderActionDropdown(video) {
+  function renderActionCell(video) {
     const isConverting = video.status === "converting";
-    return `
-      <div class="dropdown app-actions-dropdown">
+    const analyzeButton = isConverting
+      ? `
         <button
-          class="btn btn-sm btn-light-primary app-actions-toggle"
+          class="btn btn-sm btn-light-success app-primary-row-action"
           type="button"
-          data-bs-toggle="dropdown"
-          data-bs-auto-close="true"
-          title="Actions"
-          aria-label="Actions"
-          aria-expanded="false"
+          disabled
+          title="${app.escapeHtml(`Analyze will be available after MP4 conversion finishes for ${video.original_filename}`)}"
         >
-          ${ICONS.actions}
+          ${ICONS.analysis}
+          <span>Analyze</span>
         </button>
-        <div class="dropdown-menu dropdown-menu-end app-actions-menu">
-          ${actionMenuLink({
-            href: `/count-lines?video_id=${video.id}`,
-            icon: ICONS.line,
-            label: "Lines",
-            toneClass: "app-dropdown-action-warning",
-            title: `Set count lines for ${video.original_filename}`,
-          })}
-          ${isConverting ? actionMenuButtonDisabled({
-            action: "analysis",
-            label: "Analyze",
-            toneClass: "app-dropdown-action-success",
-            title: `Analyze will be available after MP4 conversion finishes for ${video.original_filename}`,
-          }) : actionMenuLink({
-            href: `/analysis?video_id=${video.id}`,
-            icon: ICONS.analysis,
-            label: "Analyze",
-            toneClass: "app-dropdown-action-success",
-            title: `Analyze ${video.original_filename}`,
-          })}
-          ${isConverting ? actionMenuButtonDisabled({
-            action: "preview",
-            label: "Preview",
-            toneClass: "app-dropdown-action-primary",
-            title: `Preview will be available after MP4 conversion finishes for ${video.original_filename}`,
-          }) : actionMenuButton({
-            action: "preview",
-            id: video.id,
-            label: "Preview",
-            toneClass: "app-dropdown-action-primary",
-            title: `Preview ${video.original_filename}`,
-          })}
-          ${actionMenuButton({
-            action: "delete",
-            id: video.id,
-            label: "Delete",
-            toneClass: "app-dropdown-action-danger",
-            title: `Delete ${video.original_filename}`,
-          })}
+      `
+      : `
+        <a
+          class="btn btn-sm btn-light-success app-primary-row-action"
+          href="/analysis?video_id=${video.id}"
+          title="${app.escapeHtml(`Analyze ${video.original_filename}`)}"
+        >
+          ${ICONS.analysis}
+          <span>Analyze</span>
+        </a>
+      `;
+
+    return `
+      <div class="app-row-actions">
+        ${analyzeButton}
+        <div class="dropdown app-actions-dropdown">
+          <button
+            class="btn btn-sm btn-light-primary app-actions-toggle"
+            type="button"
+            data-bs-toggle="dropdown"
+            data-bs-auto-close="true"
+            title="More actions"
+            aria-label="More actions"
+            aria-expanded="false"
+          >
+            ${ICONS.actions}
+          </button>
+          <div class="dropdown-menu dropdown-menu-end app-actions-menu">
+            ${actionMenuLink({
+              href: `/count-lines?video_id=${video.id}`,
+              icon: ICONS.line,
+              label: "Lines",
+              toneClass: "app-dropdown-action-warning",
+              title: `Set count lines for ${video.original_filename}`,
+            })}
+            ${isConverting ? actionMenuButtonDisabled({
+              action: "preview",
+              label: "Preview",
+              toneClass: "app-dropdown-action-primary",
+              title: `Preview will be available after MP4 conversion finishes for ${video.original_filename}`,
+            }) : actionMenuButton({
+              action: "preview",
+              id: video.id,
+              label: "Preview",
+              toneClass: "app-dropdown-action-primary",
+              title: `Preview ${video.original_filename}`,
+            })}
+            ${actionMenuButton({
+              action: "delete",
+              id: video.id,
+              label: "Delete",
+              toneClass: "app-dropdown-action-danger",
+              title: `Delete ${video.original_filename}`,
+            })}
+          </div>
         </div>
       </div>
     `;
@@ -344,7 +358,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           <td>${app.escapeHtml(video.uploaded_by || "-")}</td>
           <td>${app.formatDateTime(video.created_at)}</td>
           <td class="text-end">
-            ${renderActionDropdown(video)}
+            ${renderActionCell(video)}
           </td>
         </tr>
       `;

@@ -248,7 +248,8 @@ function Ensure-PostgresDatabase {
             "sql/05_vehicle_event_count_lines.sql",
             "sql/06_detection_settings.sql",
             "sql/07_master_classes.sql",
-            "sql/08_video_status_converting.sql"
+            "sql/08_video_status_converting.sql",
+            "sql/09_vehicle_classification_standard.sql"
         )) {
             $sqlPath = Join-Path $RepoDir $sqlFile
             if (Test-Path $sqlPath) {

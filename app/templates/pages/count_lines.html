@@ -31,15 +31,70 @@
           <div id="countLinesSourceText" class="soft-note">No count line configuration has been set for this video yet.</div>
         </div>
 
-        <div class="d-flex flex-wrap gap-3">
-          <button id="clearSelectedLineButton" class="btn btn-light-warning" type="button">Clear Active Line</button>
-          <button id="clearAllLinesButton" class="btn btn-light-danger" type="button">Reset All</button>
-          <button id="saveCountLinesButton" class="btn btn-primary" type="button">Save Lines</button>
-        </div>
+        <div class="count-lines-action-panel">
+          <div class="count-lines-action-primary">
+            <button id="saveCountLinesButton" class="btn btn-primary" type="button">
+              <span class="app-inline-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M6 5h10l3 3v11H6V5Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                  <path d="M9 5v5h6V5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                  <path d="M9 15h6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+              </span>
+              <span>Save Lines</span>
+            </button>
+          </div>
 
-        <div class="d-flex flex-wrap gap-3">
-          <a id="goToAnalysisButton" class="btn btn-light-primary" href="/analysis">Open Analysis</a>
-          <a id="goToVideosButton" class="btn btn-light" href="/videos">Manage Videos</a>
+          <div class="count-lines-action-grid">
+            <button id="clearSelectedLineButton" class="btn btn-light-warning" type="button">
+              <span class="app-inline-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M5 17h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  <path d="M8 8h8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
+                  <circle cx="16" cy="8" r="1.5" fill="currentColor"/>
+                  <circle cx="5" cy="17" r="1.5" fill="currentColor"/>
+                  <circle cx="14" cy="17" r="1.5" fill="currentColor"/>
+                  <path d="m17 14 4 4M21 14l-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+              </span>
+              <span>Clear Active Line</span>
+            </button>
+            <button id="clearAllLinesButton" class="btn btn-light-danger" type="button">
+              <span class="app-inline-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M6 7h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  <path d="M9 7V5h6v2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M8 7l1 12h6l1-12" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              <span>Reset All</span>
+            </button>
+          </div>
+
+          <div class="count-lines-action-grid count-lines-action-grid-secondary">
+            <a id="goToAnalysisButton" class="btn btn-light-primary" href="/analysis">
+              <span class="app-inline-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M5 19V9M12 19V5M19 19v-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+              </span>
+              <span>Open Analysis</span>
+            </a>
+            <a id="goToVideosButton" class="btn btn-light" href="/videos">
+              <span class="app-inline-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <rect x="4" y="6" width="16" height="12" rx="2.5" stroke="currentColor" stroke-width="1.8"/>
+                  <path d="m10 10 5 2-5 2v-4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              <span>Manage Videos</span>
+            </a>
+          </div>
+
+          <div class="count-lines-action-note">
+            Save first after changing a line. Analysis will use the last saved line configuration for this video.
+          </div>
         </div>
       </div>
     </div>

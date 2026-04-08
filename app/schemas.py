@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.constants import DEFAULT_MASTER_CLASSES
+
 
 class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -145,7 +147,11 @@ class MasterClassUpdateItem(BaseModel):
 
 
 class MasterClassUpdate(BaseModel):
-    items: list[MasterClassUpdateItem] = Field(default_factory=list, min_length=1, max_length=5)
+    items: list[MasterClassUpdateItem] = Field(
+        default_factory=list,
+        min_length=1,
+        max_length=len(DEFAULT_MASTER_CLASSES),
+    )
 
 
 class AnalysisJobRead(ORMModel):
@@ -233,6 +239,9 @@ class VideoEventRead(ORMModel):
     track_id: Optional[int]
     vehicle_class: str
     detected_label: Optional[str]
+    source_label: Optional[str] = None
+    vehicle_type_code: Optional[str] = None
+    vehicle_type_label: Optional[str] = None
     golongan_code: str
     golongan_label: str
     count_line_order: Optional[int]

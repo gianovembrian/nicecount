@@ -10,7 +10,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   function setSaving(isSaving) {
     saveButton.disabled = isSaving;
     reloadButton.disabled = isSaving;
-    saveButton.textContent = isSaving ? "Saving..." : "Save Master Class";
+    saveButton.textContent = isSaving ? "Saving..." : "Save Master Vehicle Classes";
   }
 
   function renderItems(items) {
@@ -92,7 +92,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     app.setAlert(alertBox, "danger", "");
     try {
       await loadMasterClasses();
-      app.setAlert(alertBox, "success", "Master class reloaded");
+      app.setAlert(alertBox, "success", "Vehicle class master reloaded");
     } catch (error) {
       app.setAlert(alertBox, "danger", error.message);
     }
@@ -104,7 +104,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const payload = buildPayload();
     if (payload.items.some((item) => !item.label)) {
-      app.setAlert(alertBox, "danger", "Each master class must have a label");
+      app.setAlert(alertBox, "danger", "Each vehicle class must have a label");
       return;
     }
 
@@ -115,7 +115,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         body: JSON.stringify(payload),
       });
       renderItems(saved);
-      app.setAlert(alertBox, "success", "Master class saved successfully");
+      app.setAlert(alertBox, "success", "Vehicle class master saved successfully");
     } catch (error) {
       app.setAlert(alertBox, "danger", error.message);
     } finally {
