@@ -188,16 +188,31 @@ def _classify_vehicle_type(*, vehicle_class: str, geometry: VehicleGeometry) -> 
 
 
 def _classify_car_like(geometry: VehicleGeometry) -> str:
-    if geometry.normalized_width >= 0.21 or geometry.aspect_ratio >= 1.45:
-        return VEHICLE_TYPE_PICKUP_MICRO_DELIVERY
-
+    # YOLO's coarse "car" label covers sedans, jeeps, MPVs, and SUVs.
+    # Keep this conservative so a wide foreground MPV is not promoted to a
+    # commercial pickup/micro-truck from a single ambiguous frame.
     if geometry.normalized_height >= 0.32 or geometry.aspect_ratio <= 0.95:
         return VEHICLE_TYPE_MEDIUM_PASSENGER
+
+    if (
+        geometry.aspect_ratio >= 1.85
+        and geometry.normalized_width >= 0.34
+        and geometry.normalized_height < 0.30
+    ):
+        return VEHICLE_TYPE_PICKUP_MICRO_DELIVERY
 
     return VEHICLE_TYPE_PASSENGER_CAR
 
 
 def _classify_bus_like(geometry: VehicleGeometry) -> str:
+    if (
+        geometry.normalized_height < 0.24
+        and geometry.normalized_width < 0.08
+        and geometry.normalized_area < 0.012
+        and geometry.aspect_ratio < 0.75
+    ):
+        return VEHICLE_TYPE_MOTORCYCLE
+
     if geometry.normalized_height < 0.14 and geometry.normalized_area < 0.010:
         return VEHICLE_TYPE_MEDIUM_PASSENGER
 
@@ -212,6 +227,14 @@ def _classify_bus_like(geometry: VehicleGeometry) -> str:
 
 
 def _classify_truck_like(geometry: VehicleGeometry) -> str:
+    if (
+        geometry.normalized_height < 0.24
+        and geometry.normalized_width < 0.09
+        and geometry.normalized_area < 0.012
+        and geometry.aspect_ratio < 0.80
+    ):
+        return VEHICLE_TYPE_MOTORCYCLE
+
     # Recover common false-positive SUVs / MPVs that the detector tagged as trucks.
     if (
         geometry.normalized_height < 0.28

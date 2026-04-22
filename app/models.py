@@ -10,9 +10,19 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.constants import (
+    DEFAULT_BUS_MIN_CONFIDENCE,
+    DEFAULT_CAR_MIN_CONFIDENCE,
+    DEFAULT_FRAME_STRIDE,
     DEFAULT_GLOBAL_CONFIDENCE,
+    DEFAULT_IOU_THRESHOLD,
     DEFAULT_MOTORCYCLE_MIN_CONFIDENCE,
+    DEFAULT_PREVIEW_FPS,
+    DEFAULT_PREVIEW_JPEG_QUALITY,
+    DEFAULT_PREVIEW_MAX_WIDTH,
+    DEFAULT_TARGET_ANALYSIS_FPS,
+    DEFAULT_TRUCK_MIN_CONFIDENCE,
     DEFAULT_VEHICLE_MIN_CONFIDENCE,
+    DEFAULT_WORKING_MAX_WIDTH,
 )
 from app.database import Base
 
@@ -47,10 +57,48 @@ class DetectionSettings(TimestampMixin, Base):
         nullable=False,
         default=DEFAULT_MOTORCYCLE_MIN_CONFIDENCE,
     )
+    car_min_confidence: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+        default=DEFAULT_CAR_MIN_CONFIDENCE,
+    )
+    bus_min_confidence: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+        default=DEFAULT_BUS_MIN_CONFIDENCE,
+    )
+    truck_min_confidence: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+        default=DEFAULT_TRUCK_MIN_CONFIDENCE,
+    )
     vehicle_min_confidence: Mapped[float] = mapped_column(
         Float,
         nullable=False,
         default=DEFAULT_VEHICLE_MIN_CONFIDENCE,
+    )
+    iou_threshold: Mapped[float] = mapped_column(Float, nullable=False, default=DEFAULT_IOU_THRESHOLD)
+    frame_stride: Mapped[int] = mapped_column(Integer, nullable=False, default=DEFAULT_FRAME_STRIDE)
+    target_analysis_fps: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+        default=DEFAULT_TARGET_ANALYSIS_FPS,
+    )
+    preview_fps: Mapped[float] = mapped_column(Float, nullable=False, default=DEFAULT_PREVIEW_FPS)
+    working_max_width: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=DEFAULT_WORKING_MAX_WIDTH,
+    )
+    preview_max_width: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=DEFAULT_PREVIEW_MAX_WIDTH,
+    )
+    preview_jpeg_quality: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=DEFAULT_PREVIEW_JPEG_QUALITY,
     )
 
 

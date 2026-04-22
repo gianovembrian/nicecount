@@ -3,7 +3,19 @@ from __future__ import annotations
 import unittest
 
 from app.constants import DEFAULT_MASTER_CLASSES, MASTER_CLASS_CODES
-from app.services.analysis import _build_report_events_from_overlay_frames, _stabilize_track_detection
+from app.services.analysis import (
+    AnalysisRoi,
+    ProcessConfig,
+    build_process_config,
+    _assign_supplemental_motorcycle_track_id,
+    _build_motorcycle_focus_rois,
+    _build_report_events_from_overlay_frames,
+    _is_detection_candidate,
+    _is_duplicate_supplemental_motorcycle_detection,
+    _resolve_analysis_roi,
+    _resolve_effective_frame_stride,
+    _stabilize_track_detection,
+)
 from app.services.vehicle_classification import (
     VEHICLE_TYPE_ARTICULATED_TRUCK,
     VEHICLE_TYPE_LARGE_BUS,
@@ -59,7 +71,7 @@ class VehicleClassificationTest(unittest.TestCase):
     def test_car_family_splits_into_class_2_3_and_4(self) -> None:
         passenger_car = self.classify("car", (900, 640, 1160, 880))
         medium_passenger = self.classify("car", (900, 560, 1180, 900))
-        pickup_delivery = self.classify("car", (880, 620, 1260, 860))
+        pickup_delivery = self.classify("car", (400, 650, 1350, 900))
 
         self.assertEqual(passenger_car.vehicle_type_code, VEHICLE_TYPE_PASSENGER_CAR)
         self.assertEqual(passenger_car.golongan_code, "2")
@@ -67,6 +79,11 @@ class VehicleClassificationTest(unittest.TestCase):
         self.assertEqual(medium_passenger.golongan_code, "3")
         self.assertEqual(pickup_delivery.vehicle_type_code, VEHICLE_TYPE_PICKUP_MICRO_DELIVERY)
         self.assertEqual(pickup_delivery.golongan_code, "4")
+
+    def test_foreground_mpv_does_not_default_to_pickup_delivery(self) -> None:
+        result = self.classify("car", (356, 570, 1210, 1040))
+        self.assertIn(result.vehicle_type_code, {VEHICLE_TYPE_PASSENGER_CAR, VEHICLE_TYPE_MEDIUM_PASSENGER})
+        self.assertIn(result.golongan_code, {"2", "3"})
 
     def test_bus_family_splits_into_5a_and_5b(self) -> None:
         small_bus = self.classify("bus", (860, 560, 1220, 900))
@@ -110,6 +127,8 @@ class VehicleClassificationTest(unittest.TestCase):
             source_label="bus",
             confidence=0.64,
             bbox=(40, 288, 322, 655),
+            frame_width=self.frame_width,
+            frame_height=self.frame_height,
         )
         second = _stabilize_track_detection(
             track_states=track_states,
@@ -119,6 +138,8 @@ class VehicleClassificationTest(unittest.TestCase):
             source_label="truck",
             confidence=0.82,
             bbox=(410, 163, 566, 267),
+            frame_width=self.frame_width,
+            frame_height=self.frame_height,
         )
 
         self.assertEqual(first["reference_vehicle_class"], "bus")
@@ -217,6 +238,140 @@ class VehicleClassificationTest(unittest.TestCase):
         self.assertTrue(all(event["vehicle_class"] == "bus" for event in events))
         self.assertTrue(all(event["vehicle_type_code"] == VEHICLE_TYPE_LARGE_BUS for event in events))
         self.assertTrue(all(event["golongan_code"] == "5b" for event in events))
+
+    def test_small_false_bus_can_be_recovered_to_motorcycle(self) -> None:
+        result = self.classify("bus", (980, 720, 1060, 930))
+        self.assertEqual(result.vehicle_type_code, VEHICLE_TYPE_MOTORCYCLE)
+        self.assertEqual(result.golongan_code, "1")
+
+    def test_analysis_roi_uses_full_width_and_line_context(self) -> None:
+        class Line:
+            def __init__(self, start_y: float, end_y: float) -> None:
+                self.start_y = start_y
+                self.end_y = end_y
+                self.is_active = True
+
+        roi = _resolve_analysis_roi([Line(0.56, 0.52)], self.frame_width, self.frame_height)
+        self.assertEqual(roi.x1, 0)
+        self.assertEqual(roi.x2, self.frame_width)
+        self.assertLess(roi.y1, int(self.frame_height * 0.40))
+        self.assertEqual(roi.y2, self.frame_height)
+
+    def test_effective_frame_stride_respects_minimum_target_fps(self) -> None:
+        self.assertEqual(_resolve_effective_frame_stride(25.0, 1, 15.0), 1)
+        self.assertEqual(_resolve_effective_frame_stride(30.0, 5, 15.0), 2)
+        self.assertEqual(_resolve_effective_frame_stride(60.0, 10, 20.0), 3)
+
+    def test_motorcycle_focus_rois_split_large_road_roi(self) -> None:
+        roi = AnalysisRoi(0, 80, 1600, 900)
+        focus_rois = _build_motorcycle_focus_rois(roi, 1600, 900)
+
+        self.assertEqual(len(focus_rois), 2)
+        self.assertTrue(all(focus_roi.x1 >= 0 and focus_roi.y1 >= 0 for focus_roi in focus_rois))
+        self.assertTrue(all(focus_roi.x2 <= 1600 and focus_roi.y2 <= 900 for focus_roi in focus_rois))
+        self.assertTrue(all(focus_roi.width < roi.width or focus_roi.height < roi.height for focus_roi in focus_rois))
+
+    def test_supplemental_motorcycle_duplicate_filter_keeps_adjacent_motorcycle(self) -> None:
+        main_detections = [
+            {
+                "vehicle_class": "car",
+                "bbox": (700.0, 500.0, 1040.0, 760.0),
+            }
+        ]
+        adjacent_motorcycle = (1045.0, 540.0, 1110.0, 760.0)
+        same_motorcycle = (710.0, 510.0, 1030.0, 750.0)
+
+        self.assertFalse(_is_duplicate_supplemental_motorcycle_detection(adjacent_motorcycle, main_detections))
+        self.assertTrue(_is_duplicate_supplemental_motorcycle_detection(same_motorcycle, main_detections))
+
+    def test_supplemental_motorcycle_tracker_keeps_fast_small_track(self) -> None:
+        tracks = {}
+        first_id, next_id, first_status = _assign_supplemental_motorcycle_track_id(
+            tracks=tracks,
+            bbox=(500.0, 500.0, 560.0, 700.0),
+            frame_number=10,
+            frame_width=self.frame_width,
+            frame_height=self.frame_height,
+            next_track_id=800000,
+        )
+        second_id, next_id, second_status = _assign_supplemental_motorcycle_track_id(
+            tracks=tracks,
+            bbox=(540.0, 535.0, 600.0, 735.0),
+            frame_number=11,
+            frame_width=self.frame_width,
+            frame_height=self.frame_height,
+            next_track_id=next_id,
+        )
+
+        self.assertEqual(first_status, "created")
+        self.assertEqual(second_status, "matched")
+        self.assertEqual(first_id, second_id)
+
+    def test_class_specific_thresholds_keep_motorcycle_more_permissive_than_truck(self) -> None:
+        config = ProcessConfig(
+            model_path="yolov8s.pt",
+            tracker_config="bytetrack.yaml",
+            frame_stride=1,
+            target_analysis_fps=15.0,
+            preview_fps=6.0,
+            working_max_width=1600,
+            preview_max_width=960,
+            preview_jpeg_quality=70,
+            inference_imgsz=1152,
+            inference_device="cpu",
+            confidence_threshold=0.12,
+            motorcycle_min_confidence=0.12,
+            car_min_confidence=0.30,
+            bus_min_confidence=0.34,
+            truck_min_confidence=0.38,
+            iou_threshold=0.45,
+            save_annotated_video=False,
+        )
+        motorcycle_bbox = (850, 630, 905, 910)
+        tiny_truck_bbox = (850, 630, 905, 910)
+        self.assertTrue(
+            _is_detection_candidate(
+                "motorcycle",
+                0.18,
+                motorcycle_bbox,
+                self.frame_width,
+                self.frame_height,
+                config,
+            )
+        )
+        self.assertFalse(
+            _is_detection_candidate(
+                "truck",
+                0.18,
+                tiny_truck_bbox,
+                self.frame_width,
+                self.frame_height,
+                config,
+            )
+        )
+
+    def test_runtime_settings_override_analysis_config(self) -> None:
+        config = build_process_config(
+            {
+                "confidence_threshold": 0.21,
+                "iou_threshold": 0.52,
+                "frame_stride": 2,
+                "target_analysis_fps": 20.0,
+                "preview_fps": 8.0,
+                "working_max_width": 1280,
+                "preview_max_width": 720,
+                "preview_jpeg_quality": 82,
+            }
+        )
+
+        self.assertEqual(config.confidence_threshold, 0.21)
+        self.assertEqual(config.iou_threshold, 0.52)
+        self.assertEqual(config.frame_stride, 2)
+        self.assertEqual(config.target_analysis_fps, 20.0)
+        self.assertEqual(config.preview_fps, 8.0)
+        self.assertEqual(config.working_max_width, 1280)
+        self.assertEqual(config.preview_max_width, 720)
+        self.assertEqual(config.preview_jpeg_quality, 82)
 
 
 if __name__ == "__main__":

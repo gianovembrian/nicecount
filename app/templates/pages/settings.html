@@ -5,10 +5,14 @@
 
 <div class="card">
   <div class="card-header border-0 pt-7">
-    <h3 class="card-title m-0">Detection Thresholds</h3>
+    <h3 class="card-title m-0">Detection Settings</h3>
   </div>
   <form id="detectionSettingsForm">
     <div class="card-body pt-3">
+      <div class="mb-6">
+        <div class="fw-bold fs-5">Class Detection Thresholds</div>
+        <div class="text-muted fs-7">Controls which detections are accepted before tracking and counting.</div>
+      </div>
       <div class="row g-6">
         <div class="col-xl-4 col-md-6">
           <label class="form-label fw-semibold" for="globalConfidenceInput">Global Confidence</label>
@@ -39,10 +43,10 @@
           <div class="form-text">Additional filter for motorcycle detections before counting.</div>
         </div>
         <div class="col-xl-4 col-md-6">
-          <label class="form-label fw-semibold" for="vehicleMinConfidenceInput">Car / Bus / Truck Min Confidence</label>
+          <label class="form-label fw-semibold" for="carMinConfidenceInput">Car Min Confidence</label>
           <input
-            id="vehicleMinConfidenceInput"
-            name="vehicle_min_confidence"
+            id="carMinConfidenceInput"
+            name="car_min_confidence"
             class="form-control form-control-solid"
             type="number"
             min="0"
@@ -50,15 +54,151 @@
             step="0.01"
             required
           />
-          <div class="form-text">Additional filter shared by car, bus, and truck detections.</div>
+          <div class="form-text">Used for passenger cars, medium passenger vehicles, and pickup-like vehicles.</div>
+        </div>
+        <div class="col-xl-4 col-md-6">
+          <label class="form-label fw-semibold" for="busMinConfidenceInput">Bus Min Confidence</label>
+          <input
+            id="busMinConfidenceInput"
+            name="bus_min_confidence"
+            class="form-control form-control-solid"
+            type="number"
+            min="0"
+            max="1"
+            step="0.01"
+            required
+          />
+          <div class="form-text">Keep this stricter than cars to reduce small-object false bus detections.</div>
+        </div>
+        <div class="col-xl-4 col-md-6">
+          <label class="form-label fw-semibold" for="truckMinConfidenceInput">Truck Min Confidence</label>
+          <input
+            id="truckMinConfidenceInput"
+            name="truck_min_confidence"
+            class="form-control form-control-solid"
+            type="number"
+            min="0"
+            max="1"
+            step="0.01"
+            required
+          />
+          <div class="form-text">Use the tightest threshold here to stop motorcycles from being promoted to truck.</div>
+        </div>
+      </div>
+
+      <div class="separator my-8"></div>
+
+      <div class="mb-6">
+        <div class="fw-bold fs-5">Analysis Runtime</div>
+        <div class="text-muted fs-7">These values are applied to new analysis jobs. Existing completed results are not recalculated automatically.</div>
+      </div>
+      <div class="row g-6">
+        <div class="col-xl-3 col-md-6">
+          <label class="form-label fw-semibold" for="iouThresholdInput">IOU Threshold</label>
+          <input
+            id="iouThresholdInput"
+            name="iou_threshold"
+            class="form-control form-control-solid"
+            type="number"
+            min="0"
+            max="1"
+            step="0.01"
+            required
+          />
+          <div class="form-text">NMS overlap threshold. Higher values keep more overlapping boxes.</div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+          <label class="form-label fw-semibold" for="frameStrideInput">Frame Stride</label>
+          <input
+            id="frameStrideInput"
+            name="frame_stride"
+            class="form-control form-control-solid"
+            type="number"
+            min="1"
+            max="30"
+            step="1"
+            required
+          />
+          <div class="form-text">Analyze every N frames. Use 1 for maximum recall.</div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+          <label class="form-label fw-semibold" for="targetAnalysisFpsInput">Target Analysis FPS</label>
+          <input
+            id="targetAnalysisFpsInput"
+            name="target_analysis_fps"
+            class="form-control form-control-solid"
+            type="number"
+            min="15"
+            max="60"
+            step="1"
+            required
+          />
+          <div class="form-text">Effective analysis sampling target. Minimum is 15 FPS.</div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+          <label class="form-label fw-semibold" for="previewFpsInput">Preview FPS</label>
+          <input
+            id="previewFpsInput"
+            name="preview_fps"
+            class="form-control form-control-solid"
+            type="number"
+            min="6"
+            max="30"
+            step="1"
+            required
+          />
+          <div class="form-text">How often preview images are refreshed during processing.</div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+          <label class="form-label fw-semibold" for="workingMaxWidthInput">Working Max Width</label>
+          <input
+            id="workingMaxWidthInput"
+            name="working_max_width"
+            class="form-control form-control-solid"
+            type="number"
+            min="0"
+            max="7680"
+            step="1"
+            required
+          />
+          <div class="form-text">Resize width before inference. Use 0 to keep source width.</div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+          <label class="form-label fw-semibold" for="previewMaxWidthInput">Preview Max Width</label>
+          <input
+            id="previewMaxWidthInput"
+            name="preview_max_width"
+            class="form-control form-control-solid"
+            type="number"
+            min="0"
+            max="3840"
+            step="1"
+            required
+          />
+          <div class="form-text">Maximum width for generated preview frames. Use 0 to keep source width.</div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+          <label class="form-label fw-semibold" for="previewJpegQualityInput">Preview JPEG Quality</label>
+          <input
+            id="previewJpegQualityInput"
+            name="preview_jpeg_quality"
+            class="form-control form-control-solid"
+            type="number"
+            min="30"
+            max="95"
+            step="1"
+            required
+          />
+          <div class="form-text">Preview compression quality. Higher values cost more disk and bandwidth.</div>
         </div>
       </div>
 
       <div class="separator my-8"></div>
 
       <div class="text-muted fs-7">
-        Example: <code>0.35</code> means 35% confidence. The effective class threshold is the higher value between
-        <strong>Global Confidence</strong> and the relevant class-specific threshold.
+        Contoh: <code>0.35</code> berarti confidence 35%. Threshold class yang efektif adalah nilai terbesar antara
+        <strong>Global Confidence</strong> dan threshold khusus class terkait. Motor kecil juga dibantu oleh road ROI,
+        motorcycle focus tile, dan analysis frame density yang lebih tinggi di backend pipeline.
       </div>
     </div>
     <div class="card-footer d-flex justify-content-end gap-3">
@@ -66,6 +206,121 @@
       <button type="submit" id="saveDetectionSettingsButton" class="btn btn-primary">Save Settings</button>
     </div>
   </form>
+</div>
+
+<div class="card mt-8">
+  <div class="card-header border-0 pt-7">
+    <h3 class="card-title m-0">Dokumentasi Pengaturan Deteksi</h3>
+  </div>
+  <div class="card-body pt-3">
+    <div class="alert alert-info d-flex flex-column gap-2 mb-8">
+      <div class="fw-bold">Catatan penggunaan</div>
+      <div>
+        Perubahan pada halaman ini hanya berlaku untuk analisis baru. Jika video sudah selesai dianalisis, hapus log
+        deteksi atau jalankan analisis ulang agar hasil memakai pengaturan terbaru.
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table align-middle table-row-dashed gy-5">
+        <thead>
+          <tr class="text-muted fw-bold fs-7 text-uppercase">
+            <th>Parameter</th>
+            <th>Fungsi</th>
+            <th>Jika dinaikkan</th>
+            <th>Jika diturunkan</th>
+          </tr>
+        </thead>
+        <tbody class="fw-semibold text-gray-700">
+          <tr>
+            <td><code>Global Confidence</code></td>
+            <td>Ambang confidence dasar dari model YOLO sebelum hasil deteksi diproses lebih lanjut.</td>
+            <td>False positive berkurang, tetapi motor kecil bisa lebih sering tidak terdeteksi.</td>
+            <td>Recall naik, tetapi noise dan deteksi palsu bisa bertambah.</td>
+          </tr>
+          <tr>
+            <td><code>Motorcycle Min Confidence</code></td>
+            <td>Ambang minimum khusus untuk deteksi sepeda motor.</td>
+            <td>Deteksi motor lebih selektif, tetapi motor jauh/kecil bisa hilang.</td>
+            <td>Motor kecil lebih mudah masuk, tetapi risiko objek bukan motor ikut terdeteksi naik.</td>
+          </tr>
+          <tr>
+            <td><code>Car / Bus / Truck Min Confidence</code></td>
+            <td>Ambang minimum khusus untuk mobil, bus, dan truk setelah threshold global.</td>
+            <td>Hasil lebih bersih untuk class terkait, tetapi kendaraan ambigu bisa terbuang.</td>
+            <td>Class terkait lebih mudah muncul, tetapi salah klasifikasi bisa meningkat.</td>
+          </tr>
+          <tr>
+            <td><code>IOU Threshold</code></td>
+            <td>Mengatur seberapa agresif NMS membuang box yang saling overlap.</td>
+            <td>Lebih banyak box overlap dipertahankan, berguna untuk motor yang berdekatan.</td>
+            <td>Box overlap lebih cepat dibuang, tetapi motor dekat kendaraan lain bisa ikut hilang.</td>
+          </tr>
+          <tr>
+            <td><code>Frame Stride</code></td>
+            <td>Mengatur jarak frame yang dianalisis. Nilai <code>1</code> berarti sampling paling rapat.</td>
+            <td>Proses lebih cepat, tetapi motor cepat lebih mudah terlewat.</td>
+            <td>Akurasi gerakan lebih baik. Untuk motor, disarankan tetap <code>1</code>.</td>
+          </tr>
+          <tr>
+            <td><code>Target Analysis FPS</code></td>
+            <td>Target jumlah frame per detik yang diproses untuk analisis.</td>
+            <td>Motor cepat lebih stabil terdeteksi, tetapi proses analisis lebih berat.</td>
+            <td>Proses lebih ringan, tetapi objek kecil/cepat lebih mudah skip.</td>
+          </tr>
+          <tr>
+            <td><code>Working Max Width</code></td>
+            <td>Lebar maksimal frame kerja yang masuk ke pipeline inferensi.</td>
+            <td>Detail objek meningkat, motor kecil lebih mudah dikenali, tetapi proses lebih lambat.</td>
+            <td>Analisis lebih cepat, tetapi detail motor kecil bisa turun.</td>
+          </tr>
+          <tr>
+            <td><code>Preview FPS</code></td>
+            <td>Frekuensi update preview saat proses analisis berjalan.</td>
+            <td>Preview terlihat lebih sering diperbarui, tetapi penggunaan I/O sedikit naik.</td>
+            <td>Preview lebih ringan, tidak banyak mempengaruhi akurasi deteksi.</td>
+          </tr>
+          <tr>
+            <td><code>Preview Max Width</code></td>
+            <td>Lebar maksimal gambar preview yang dikirim ke UI.</td>
+            <td>Preview lebih detail, ukuran file preview lebih besar.</td>
+            <td>Preview lebih ringan, detail tampilan berkurang.</td>
+          </tr>
+          <tr>
+            <td><code>Preview JPEG Quality</code></td>
+            <td>Kualitas kompresi JPEG untuk gambar preview.</td>
+            <td>Preview lebih jelas, tetapi ukuran file lebih besar.</td>
+            <td>Preview lebih kecil dan ringan, tetapi kualitas visual turun.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="separator my-8"></div>
+
+    <div class="row g-6">
+      <div class="col-lg-6">
+        <div class="border border-dashed rounded p-6 h-100">
+          <div class="fw-bold fs-6 mb-3">Rekomendasi saat banyak motor tidak terdeteksi</div>
+          <div class="text-muted">
+            Pertahankan <code>Frame Stride</code> di <code>1</code>, naikkan <code>Target Analysis FPS</code> ke
+            <code>20</code> atau <code>25</code>, coba <code>Working Max Width</code> <code>1920</code>, dan naikkan
+            <code>IOU Threshold</code> ke sekitar <code>0.55</code> jika banyak motor berdekatan.
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="border border-dashed rounded p-6 h-100">
+          <div class="fw-bold fs-6 mb-3">Batasan model</div>
+          <div class="text-muted">
+            Jika raw output YOLO tetap tidak mengeluarkan class <code>motorcycle</code>, perubahan setting tidak akan
+            cukup. Solusi paling kuat adalah fine-tuning model dengan dataset CCTV lokal yang berisi motor Indonesia,
+            sudut kamera tinggi, objek kecil, dan kondisi jalan nyata.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 

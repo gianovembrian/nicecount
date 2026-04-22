@@ -88,6 +88,8 @@ Kalau database sudah terbuat dari schema lama, jalankan migrasi:
 ```bash
 psql -d vehicle_count -f sql/03_mvp_minimal_app.sql
 psql -d vehicle_count -f sql/09_vehicle_classification_standard.sql
+psql -d vehicle_count -f sql/10_detection_pipeline_refactor.sql
+psql -d vehicle_count -f sql/11_detection_runtime_settings.sql
 ```
 
 4. Jalankan server
@@ -101,6 +103,12 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```bash
 python3 -m unittest discover -s tests
 ```
+
+## Detection Notes
+
+- The current detector focuses inference on the road ROI, adds supplemental motorcycle focus tiles for small objects, uses class-specific thresholds, and applies temporal track smoothing so small motorcycles are less likely to be dropped or overridden by large-vehicle labels.
+- Passenger cars are classified conservatively. A raw YOLO `car` detection is not promoted to `Pickup / micro truck / delivery` unless the geometry strongly supports a commercial vehicle shape.
+- For production-grade accuracy on Indonesian CCTV scenes, the recommended next step is to fine-tune the model with local CCTV data, especially for motorcycles, buses, and truck/pickup variants.
 
 ## Windows Auto Install
 

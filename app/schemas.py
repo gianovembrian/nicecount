@@ -55,7 +55,16 @@ class DetectionSettingsRead(ORMModel):
     id: int
     global_confidence: float = Field(ge=0.0, le=1.0)
     motorcycle_min_confidence: float = Field(ge=0.0, le=1.0)
-    vehicle_min_confidence: float = Field(ge=0.0, le=1.0)
+    car_min_confidence: float = Field(ge=0.0, le=1.0)
+    bus_min_confidence: float = Field(ge=0.0, le=1.0)
+    truck_min_confidence: float = Field(ge=0.0, le=1.0)
+    iou_threshold: float = Field(ge=0.0, le=1.0)
+    frame_stride: int = Field(ge=1, le=30)
+    target_analysis_fps: float = Field(ge=15.0, le=60.0)
+    preview_fps: float = Field(ge=6.0, le=30.0)
+    working_max_width: int = Field(ge=0, le=7680)
+    preview_max_width: int = Field(ge=0, le=3840)
+    preview_jpeg_quality: int = Field(ge=30, le=95)
     created_at: datetime
     updated_at: datetime
 
@@ -63,7 +72,16 @@ class DetectionSettingsRead(ORMModel):
 class DetectionSettingsUpdate(BaseModel):
     global_confidence: float = Field(ge=0.0, le=1.0)
     motorcycle_min_confidence: float = Field(ge=0.0, le=1.0)
-    vehicle_min_confidence: float = Field(ge=0.0, le=1.0)
+    car_min_confidence: float = Field(ge=0.0, le=1.0)
+    bus_min_confidence: float = Field(ge=0.0, le=1.0)
+    truck_min_confidence: float = Field(ge=0.0, le=1.0)
+    iou_threshold: float = Field(ge=0.0, le=1.0)
+    frame_stride: int = Field(ge=1, le=30)
+    target_analysis_fps: float = Field(ge=15.0, le=60.0)
+    preview_fps: float = Field(ge=6.0, le=30.0)
+    working_max_width: int = Field(ge=0, le=7680)
+    preview_max_width: int = Field(ge=0, le=3840)
+    preview_jpeg_quality: int = Field(ge=30, le=95)
 
 
 class GpuAuditRuntimeRead(BaseModel):

@@ -102,7 +102,7 @@ def get_settings() -> Settings:
         default_confidence=_as_float(os.getenv("DEFAULT_CONFIDENCE"), 0.12),
         default_iou=_as_float(os.getenv("DEFAULT_IOU"), 0.45),
         default_frame_stride=max(_as_int(os.getenv("DEFAULT_FRAME_STRIDE"), 1), 1),
-        default_target_analysis_fps=max(_as_float(os.getenv("DEFAULT_TARGET_ANALYSIS_FPS"), 10.0), 0.1),
+        default_target_analysis_fps=max(_as_float(os.getenv("DEFAULT_TARGET_ANALYSIS_FPS"), 15.0), 15.0),
         default_preview_fps=max(_as_float(os.getenv("DEFAULT_PREVIEW_FPS"), 6.0), 0.1),
         default_working_max_width=max(_as_int(os.getenv("DEFAULT_WORKING_MAX_WIDTH"), 1600), 0),
         default_preview_max_width=max(_as_int(os.getenv("DEFAULT_PREVIEW_MAX_WIDTH"), 960), 0),

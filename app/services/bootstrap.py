@@ -6,9 +6,19 @@ from sqlalchemy.orm import Session
 from app.auth import hash_password, normalize_username
 from app.config import get_settings
 from app.constants import (
+    DEFAULT_BUS_MIN_CONFIDENCE,
+    DEFAULT_CAR_MIN_CONFIDENCE,
+    DEFAULT_FRAME_STRIDE,
     DEFAULT_GLOBAL_CONFIDENCE,
+    DEFAULT_IOU_THRESHOLD,
     DEFAULT_MOTORCYCLE_MIN_CONFIDENCE,
+    DEFAULT_PREVIEW_FPS,
+    DEFAULT_PREVIEW_JPEG_QUALITY,
+    DEFAULT_PREVIEW_MAX_WIDTH,
+    DEFAULT_TARGET_ANALYSIS_FPS,
+    DEFAULT_TRUCK_MIN_CONFIDENCE,
     DEFAULT_VEHICLE_MIN_CONFIDENCE,
+    DEFAULT_WORKING_MAX_WIDTH,
 )
 from app.models import CountLine, DetectionSettings, Site, User
 from app.services.master_classes import get_or_create_master_classes
@@ -95,7 +105,17 @@ def _ensure_detection_settings(db: Session) -> None:
             id=1,
             global_confidence=DEFAULT_GLOBAL_CONFIDENCE,
             motorcycle_min_confidence=DEFAULT_MOTORCYCLE_MIN_CONFIDENCE,
+            car_min_confidence=DEFAULT_CAR_MIN_CONFIDENCE,
+            bus_min_confidence=DEFAULT_BUS_MIN_CONFIDENCE,
+            truck_min_confidence=DEFAULT_TRUCK_MIN_CONFIDENCE,
             vehicle_min_confidence=DEFAULT_VEHICLE_MIN_CONFIDENCE,
+            iou_threshold=DEFAULT_IOU_THRESHOLD,
+            frame_stride=DEFAULT_FRAME_STRIDE,
+            target_analysis_fps=DEFAULT_TARGET_ANALYSIS_FPS,
+            preview_fps=DEFAULT_PREVIEW_FPS,
+            working_max_width=DEFAULT_WORKING_MAX_WIDTH,
+            preview_max_width=DEFAULT_PREVIEW_MAX_WIDTH,
+            preview_jpeg_quality=DEFAULT_PREVIEW_JPEG_QUALITY,
         )
     )
     db.commit()

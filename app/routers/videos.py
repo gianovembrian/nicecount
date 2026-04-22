@@ -120,7 +120,9 @@ def _serialize_process_config(db: Session):
         "inference_device": config.inference_device,
         "confidence_threshold": config.confidence_threshold,
         "motorcycle_min_confidence": config.motorcycle_min_confidence,
-        "vehicle_min_confidence": config.vehicle_min_confidence,
+        "car_min_confidence": config.car_min_confidence,
+        "bus_min_confidence": config.bus_min_confidence,
+        "truck_min_confidence": config.truck_min_confidence,
         "iou_threshold": config.iou_threshold,
         "save_annotated_video": config.save_annotated_video,
     }

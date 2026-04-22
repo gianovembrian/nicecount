@@ -23,7 +23,17 @@ CREATE TABLE IF NOT EXISTS detection_settings (
     id INTEGER PRIMARY KEY,
     global_confidence DOUBLE PRECISION NOT NULL DEFAULT 0.12,
     motorcycle_min_confidence DOUBLE PRECISION NOT NULL DEFAULT 0.12,
-    vehicle_min_confidence DOUBLE PRECISION NOT NULL DEFAULT 0.35,
+    car_min_confidence DOUBLE PRECISION NOT NULL DEFAULT 0.30,
+    bus_min_confidence DOUBLE PRECISION NOT NULL DEFAULT 0.34,
+    truck_min_confidence DOUBLE PRECISION NOT NULL DEFAULT 0.38,
+    vehicle_min_confidence DOUBLE PRECISION NOT NULL DEFAULT 0.30,
+    iou_threshold DOUBLE PRECISION NOT NULL DEFAULT 0.45,
+    frame_stride INTEGER NOT NULL DEFAULT 1,
+    target_analysis_fps DOUBLE PRECISION NOT NULL DEFAULT 15.0,
+    preview_fps DOUBLE PRECISION NOT NULL DEFAULT 6.0,
+    working_max_width INTEGER NOT NULL DEFAULT 1600,
+    preview_max_width INTEGER NOT NULL DEFAULT 960,
+    preview_jpeg_quality INTEGER NOT NULL DEFAULT 70,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

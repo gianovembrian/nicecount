@@ -315,11 +315,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  function chartSeriesEntries(totals) {
-    return state.masterClasses.map((item, index) => ({
-      code: String(item.code || ""),
-      label: item.label || item.code,
-      value: Number(totals[String(item.code || "")] || 0),
+  function aggregateChartTotals(totals) {
+    const masterClassMap = new Map(state.masterClasses.map((item) => [String(item.code || ""), item]));
+    const groupedDefinitions = [
+      { code: "1", label: "Class 1", note: masterClassMap.get("1")?.label || "Motorcycle / 3-wheel vehicle", sourceCodes: ["1"] },
+      { code: "2", label: "Class 2", note: masterClassMap.get("2")?.label || "Sedan / jeep / station wagon", sourceCodes: ["2"] },
+      { code: "3", label: "Class 3", note: masterClassMap.get("3")?.label || "Medium passenger vehicle", sourceCodes: ["3"] },
+      { code: "4", label: "Class 4", note: masterClassMap.get("4")?.label || "Pickup / micro truck / delivery", sourceCodes: ["4"] },
+      { code: "5", label: "Class 5", note: "Small bus + large bus", sourceCodes: ["5a", "5b"] },
+      { code: "6", label: "Class 6", note: "Light + medium 2-axle truck", sourceCodes: ["6a", "6b"] },
+      { code: "7", label: "Class 7", note: "3-axle + articulated + semi-trailer", sourceCodes: ["7a", "7b", "7c"] },
+      { code: "8", label: "Class 8", note: masterClassMap.get("8")?.label || "Non-motorized vehicle", sourceCodes: ["8"] },
+    ];
+
+    return groupedDefinitions.map((group, index) => ({
+      code: group.code,
+      label: group.label,
+      note: group.note,
+      value: group.sourceCodes.reduce((sum, sourceCode) => sum + Number(totals[sourceCode] || 0), 0),
       color: CHART_BAR_COLORS[index % CHART_BAR_COLORS.length],
     }));
   }
@@ -334,7 +347,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       state.classChart = null;
     }
 
-    const entries = chartSeriesEntries(totals);
+    const entries = aggregateChartTotals(totals);
     const scopeLabel = state.availableLines.length > 1 && state.selectedLineOrder
       ? formatLineDisplayName(state.selectedLineOrder)
       : "All lines";
@@ -448,7 +461,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         x: {
           formatter(value, { dataPointIndex }) {
             const entry = entries[dataPointIndex];
-            return entry ? `${entry.code} • ${entry.label}` : String(value);
+            return entry ? `${entry.label} • ${entry.note}` : String(value);
           },
         },
       },
@@ -1201,7 +1214,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       const y1 = box.y1;
       const width = box.width;
       const height = box.height;
-      const label = `${detection.track_id ?? "-"} ${detection.detected_label || detection.source_label || detection.vehicle_class} ${(Number(detection.confidence || 0) * 100).toFixed(0)}%`;
+      const overlayLabel = detection.display_label || detection.vehicle_type_label || detection.detected_label || detection.source_label || detection.vehicle_class;
+      const label = `${detection.track_id ?? "-"} ${overlayLabel} ${(Number(detection.confidence || 0) * 100).toFixed(0)}%`;
 
       overlayContext.save();
       overlayContext.strokeStyle = "#00E676";

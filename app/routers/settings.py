@@ -324,7 +324,16 @@ def update_detection_settings(
     settings_row = get_or_create_detection_settings(db)
     settings_row.global_confidence = payload.global_confidence
     settings_row.motorcycle_min_confidence = payload.motorcycle_min_confidence
-    settings_row.vehicle_min_confidence = payload.vehicle_min_confidence
+    settings_row.car_min_confidence = payload.car_min_confidence
+    settings_row.bus_min_confidence = payload.bus_min_confidence
+    settings_row.truck_min_confidence = payload.truck_min_confidence
+    settings_row.iou_threshold = payload.iou_threshold
+    settings_row.frame_stride = payload.frame_stride
+    settings_row.target_analysis_fps = payload.target_analysis_fps
+    settings_row.preview_fps = payload.preview_fps
+    settings_row.working_max_width = payload.working_max_width
+    settings_row.preview_max_width = payload.preview_max_width
+    settings_row.preview_jpeg_quality = payload.preview_jpeg_quality
     db.commit()
     db.refresh(settings_row)
     return DetectionSettingsRead.model_validate(settings_row)
