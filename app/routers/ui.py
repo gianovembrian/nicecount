@@ -42,16 +42,18 @@ def _render_page(
     page_subtitle: str = "",
     active_nav: str = "",
 ):
+    context = {
+        "request": request,
+        "current_user": user,
+        "current_user_initials": _user_initials(user),
+        "page_title": page_title,
+        "page_subtitle": page_subtitle,
+        "active_nav": active_nav,
+    }
     return TEMPLATES.TemplateResponse(
-        template_name,
-        {
-            "request": request,
-            "current_user": user,
-            "current_user_initials": _user_initials(user),
-            "page_title": page_title,
-            "page_subtitle": page_subtitle,
-            "active_nav": active_nav,
-        },
+        request=request,
+        name=template_name,
+        context=context,
     )
 
 
