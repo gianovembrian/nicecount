@@ -51,16 +51,25 @@ function Invoke-External {
     )
     if ($WorkingDirectory) { Push-Location $WorkingDirectory }
     try {
-        $output = & $FilePath @Arguments 2>&1
+        $stdoutPath = [System.IO.Path]::GetTempFileName()
+        $stderrPath = [System.IO.Path]::GetTempFileName()
+        & $FilePath @Arguments > $stdoutPath 2> $stderrPath
         $exitCode = $LASTEXITCODE
-        foreach ($line in $output) {
-            Write-Host "$line"
+        foreach ($line in (Get-Content $stdoutPath -ErrorAction SilentlyContinue)) {
+            Write-Host $line
+        }
+        foreach ($line in (Get-Content $stderrPath -ErrorAction SilentlyContinue)) {
+            Write-Host $line
         }
         if ($exitCode -ne 0) {
             Throw-Friendly "Command failed: $FilePath $($Arguments -join ' ')"
         }
+        Remove-Item $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
     }
     finally {
+        if ($stdoutPath -or $stderrPath) {
+            Remove-Item $stdoutPath, $stderrPath -Force -ErrorAction SilentlyContinue
+        }
         if ($WorkingDirectory) { Pop-Location }
     }
 }
