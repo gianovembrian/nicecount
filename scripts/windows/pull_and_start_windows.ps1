@@ -79,12 +79,12 @@ function Resolve-PythonCommand {
 }
 
 function Build-DatabaseUrl {
-    param([string]$Host, [int]$Port, [string]$User, [string]$Password, [string]$Name)
+    param([string]$DbHost, [int]$Port, [string]$User, [string]$Password, [string]$Name)
     if ($Password) {
         $enc = [System.Uri]::EscapeDataString($Password)
-        return "postgresql+psycopg://${User}:${enc}@${Host}:${Port}/${Name}"
+        return "postgresql+psycopg://${User}:${enc}@${DbHost}:${Port}/${Name}"
     }
-    return "postgresql+psycopg://${User}@${Host}:${Port}/${Name}"
+    return "postgresql+psycopg://${User}@${DbHost}:${Port}/${Name}"
 }
 
 function Update-EnvLine {
@@ -251,7 +251,7 @@ function Ensure-VenvAndPackages {
 function Ensure-Database {
     param(
         [string]$RepoDir,
-        [string]$Host, [int]$Port,
+        [string]$DbHost, [int]$Port,
         [string]$User, [string]$Password,
         [string]$Name
     )
@@ -267,17 +267,17 @@ function Ensure-Database {
     try {
         Write-Step "Checking PostgreSQL connection"
         Invoke-External -FilePath "psql" -Arguments @(
-            "-v", "ON_ERROR_STOP=1", "-h", $Host, "-p", "$Port",
+            "-v", "ON_ERROR_STOP=1", "-h", $DbHost, "-p", "$Port",
             "-U", $User, "-d", "postgres", "-tAc", "SELECT 1;"
         )
 
-        $exists = & psql -h $Host -p "$Port" -U $User -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$Name';"
+        $exists = & psql -h $DbHost -p "$Port" -U $User -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = '$Name';"
         if ($LASTEXITCODE -ne 0) { Throw-Friendly "Failed to query pg_database." }
 
         if (-not ($exists -match "1")) {
             Write-Step "Creating database $Name"
             Invoke-External -FilePath "psql" -Arguments @(
-                "-v", "ON_ERROR_STOP=1", "-h", $Host, "-p", "$Port",
+                "-v", "ON_ERROR_STOP=1", "-h", $DbHost, "-p", "$Port",
                 "-U", $User, "-d", "postgres", "-c", "CREATE DATABASE $Name;"
             )
         }
@@ -298,7 +298,7 @@ function Ensure-Database {
             if (Test-Path $sqlPath) {
                 Write-Host "   Applying $sqlFile" -ForegroundColor DarkGray
                 Invoke-External -FilePath "psql" -Arguments @(
-                    "-v", "ON_ERROR_STOP=1", "-h", $Host, "-p", "$Port",
+                    "-v", "ON_ERROR_STOP=1", "-h", $DbHost, "-p", "$Port",
                     "-U", $User, "-d", $Name, "-f", $sqlPath
                 )
             }
@@ -412,10 +412,10 @@ $repoDir = Resolve-RepoDir `
 Pull-Repo -RepoDir $repoDir -RepoUrlValue $RepoUrl -BranchValue $Branch
 
 $pythonCommand = Resolve-PythonCommand
-$dbUrl         = Build-DatabaseUrl -Host $PgHost -Port $PgPort -User $PgUser -Password $PgPassword -Name $DatabaseName
+$dbUrl         = Build-DatabaseUrl -DbHost $PgHost -Port $PgPort -User $PgUser -Password $PgPassword -Name $DatabaseName
 
 Ensure-EnvFile        -RepoDir $repoDir -DatabaseUrl $dbUrl -Port $AppPort
 Stop-NiceCountServer  -RepoDir $repoDir -Port $AppPort
 $venvPython = Ensure-VenvAndPackages -RepoDir $repoDir -PythonCommand $pythonCommand
-Ensure-Database       -RepoDir $repoDir -Host $PgHost -Port $PgPort -User $PgUser -Password $PgPassword -Name $DatabaseName
+Ensure-Database       -RepoDir $repoDir -DbHost $PgHost -Port $PgPort -User $PgUser -Password $PgPassword -Name $DatabaseName
 Start-NiceCountServer -RepoDir $repoDir -PythonPath $venvPython -Port $AppPort -UseReloadValue:$UseReload -OpenBrowserValue:$OpenBrowser
