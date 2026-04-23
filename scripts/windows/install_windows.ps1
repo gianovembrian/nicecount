@@ -57,8 +57,15 @@ function Invoke-External {
     try {
         $stdoutPath = [System.IO.Path]::GetTempFileName()
         $stderrPath = [System.IO.Path]::GetTempFileName()
-        & $FilePath @Arguments > $stdoutPath 2> $stderrPath
-        $exitCode = $LASTEXITCODE
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            & $FilePath @Arguments > $stdoutPath 2> $stderrPath
+            $exitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+        }
         foreach ($line in (Get-Content $stdoutPath -ErrorAction SilentlyContinue)) {
             Write-Host $line
         }
