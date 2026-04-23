@@ -156,7 +156,7 @@ function Update-EnvLine {
 
 function Build-DatabaseUrl {
     param(
-        [string]$Host,
+        [string]$DbHost,
         [int]$Port,
         [string]$User,
         [string]$Password,
@@ -165,10 +165,10 @@ function Build-DatabaseUrl {
 
     if ($Password) {
         $encodedPassword = [System.Uri]::EscapeDataString($Password)
-        return "postgresql+psycopg://${User}:${encodedPassword}@${Host}:${Port}/${Name}"
+        return "postgresql+psycopg://${User}:${encodedPassword}@${DbHost}:${Port}/${Name}"
     }
 
-    return "postgresql+psycopg://${User}@${Host}:${Port}/${Name}"
+    return "postgresql+psycopg://${User}@${DbHost}:${Port}/${Name}"
 }
 
 function Ensure-Repo {
@@ -238,7 +238,7 @@ function Ensure-EnvFileIfMissing {
 function Ensure-PostgresDatabase {
     param(
         [string]$RepoDir,
-        [string]$Host,
+        [string]$DbHost,
         [int]$Port,
         [string]$User,
         [string]$Password,
