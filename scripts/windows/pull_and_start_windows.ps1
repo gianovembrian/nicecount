@@ -155,12 +155,6 @@ function Test-LocalGitBranch {
 function Checkout-TargetBranch {
     param([string]$RepoDir, [string]$BranchName)
 
-    $currentBranch = (& git -C $RepoDir rev-parse --abbrev-ref HEAD | Select-Object -First 1).Trim()
-    if ($LASTEXITCODE -ne 0) {
-        Throw-Friendly "Failed to resolve current git branch in $RepoDir."
-    }
-    if ($currentBranch -eq $BranchName) { return }
-
     if (Test-LocalGitBranch -RepoDir $RepoDir -BranchName $BranchName) {
         Invoke-External -FilePath "git" -Arguments @("-C", $RepoDir, "checkout", $BranchName)
         return
