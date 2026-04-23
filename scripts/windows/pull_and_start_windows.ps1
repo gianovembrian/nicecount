@@ -51,8 +51,12 @@ function Invoke-External {
     )
     if ($WorkingDirectory) { Push-Location $WorkingDirectory }
     try {
-        & $FilePath @Arguments
-        if ($LASTEXITCODE -ne 0) {
+        $output = & $FilePath @Arguments 2>&1
+        $exitCode = $LASTEXITCODE
+        foreach ($line in $output) {
+            Write-Host "$line"
+        }
+        if ($exitCode -ne 0) {
             Throw-Friendly "Command failed: $FilePath $($Arguments -join ' ')"
         }
     }
