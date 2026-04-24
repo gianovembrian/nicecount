@@ -77,6 +77,11 @@ SUPPLEMENTAL_MOTORCYCLE_TRACK_MAX_GAP_FRAMES = 45
 SUPPLEMENTAL_MOTORCYCLE_TILE_MIN_SIZE = 160
 SUPPLEMENTAL_MOTORCYCLE_TILE_OVERLAP_RATIO = 0.16
 SUPPLEMENTAL_MOTORCYCLE_CONFIDENCE_FLOOR = 0.08
+# Run supplemental tile detection only every Nth analyzed frame to reduce compute.
+# TRACK_MAX_GAP_FRAMES=45 gives plenty of tolerance for missed frames.
+SUPPLEMENTAL_MOTORCYCLE_FRAME_STRIDE = 3
+# Tiles are small crops — high imgsz has diminishing returns; cap at 640.
+SUPPLEMENTAL_MOTORCYCLE_IMGSZ = 640
 LINE_INTERSECTION_EPSILON = 1e-6
 CLOSE_LINE_PAIR_MAX_ANGLE_DEGREES = 12.0
 CLOSE_LINE_PAIR_MAX_GAP_RATIO = 0.12
@@ -727,8 +732,12 @@ def run_video_analysis(video_id: UUID, job_id: UUID, overrides: Optional[dict] =
                         }
                     )
 
+            run_supplemental = (
+                supplemental_motorcycle_model is not None
+                and processed_frames % SUPPLEMENTAL_MOTORCYCLE_FRAME_STRIDE == 0
+            )
             supplemental_motorcycle_detections = _collect_supplemental_motorcycle_detections(
-                model=supplemental_motorcycle_model,
+                model=supplemental_motorcycle_model if run_supplemental else None,
                 working_frame=working_frame,
                 focus_rois=motorcycle_focus_rois,
                 config=config,
@@ -1282,30 +1291,37 @@ def _collect_supplemental_motorcycle_detections(
     config: ProcessConfig,
     inference_device: str,
 ) -> list[dict]:
-    detections: list[dict] = []
     if model is None or not focus_rois:
-        return detections
+        return []
 
+    tile_frames: list = []
+    valid_rois: list[AnalysisRoi] = []
     for focus_roi in focus_rois:
         tile_frame = working_frame[focus_roi.y1:focus_roi.y2, focus_roi.x1:focus_roi.x2]
         if tile_frame.size == 0:
             continue
-        results = model.predict(
-            tile_frame,
-            verbose=False,
-            device=inference_device,
-            imgsz=config.inference_imgsz,
-            conf=_supplemental_motorcycle_confidence(config),
-            iou=max(config.iou_threshold, 0.55),
-            classes=[3],
-        )
-        if not results:
-            continue
-        result = results[0]
+        tile_frames.append(tile_frame)
+        valid_rois.append(focus_roi)
+
+    if not tile_frames:
+        return []
+
+    # Single batched call — avoids N separate model.predict() round-trips per frame.
+    batch_results = model.predict(
+        tile_frames,
+        verbose=False,
+        device=inference_device,
+        imgsz=SUPPLEMENTAL_MOTORCYCLE_IMGSZ,
+        conf=_supplemental_motorcycle_confidence(config),
+        iou=max(config.iou_threshold, 0.55),
+        classes=[3],
+    )
+
+    detections: list[dict] = []
+    for result, focus_roi in zip(batch_results, valid_rois):
         boxes = getattr(result, "boxes", None)
         if boxes is None:
             continue
-
         confidences = boxes.conf.float().cpu().tolist()
         box_values = boxes.xyxy.cpu().tolist()
         for confidence, xyxy in zip(confidences, box_values):
