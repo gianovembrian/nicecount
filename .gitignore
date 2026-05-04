@@ -11,6 +11,10 @@ __pycache__/
 *.egg-info/
 logs/
 .nicecount.pid
+.nicecount-local.pid
+.claude/
+*.zip
+yolov8s.pt
 storage/playback/*
 storage/previews/*
 storage/thumbnails/*
