@@ -9,8 +9,11 @@ set "DB_NAME=vehicle_count"
 
 echo.
 echo ============================================
-echo   NiceCount Update Launcher
+echo   NiceCount Update (Force Reset) Launcher
 echo ============================================
+echo.
+echo PERHATIAN: Script ini akan mereset repo ke versi GitHub secara paksa.
+echo Gunakan hanya jika update biasa gagal atau repo rusak.
 echo.
 echo Repo      : %REPO_URL%
 echo TargetDir : %TARGET_DIR%
@@ -19,8 +22,9 @@ echo.
 echo Jika password PostgreSQL atau path instalasi berbeda,
 echo edit file BAT ini sebelum dijalankan.
 echo.
+pause
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/gianovembrian/nicecount/main/scripts/windows/pull_and_start_windows.ps1' -OutFile $env:TEMP\update_nicecount.ps1; & $env:TEMP\update_nicecount.ps1 -RepoUrl '%REPO_URL%' -TargetDir '%TARGET_DIR%' -PgUser '%PG_USER%' -PgPassword '%PG_PASSWORD%' -DatabaseName '%DB_NAME%' -OpenBrowser"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/gianovembrian/nicecount/main/scripts/windows/update_windows.ps1' -OutFile $env:TEMP\update_force_nicecount.ps1; & $env:TEMP\update_force_nicecount.ps1 -RepoUrl '%REPO_URL%' -TargetDir '%TARGET_DIR%' -PgUser '%PG_USER%' -PgPassword '%PG_PASSWORD%' -DatabaseName '%DB_NAME%' -OpenBrowser"
 set "EXITCODE=%ERRORLEVEL%"
 
 echo.

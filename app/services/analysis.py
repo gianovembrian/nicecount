@@ -55,8 +55,8 @@ CLASS_MIN_AREA_RATIO = {
 }
 
 LARGE_VEHICLE_MIN_LONG_SIDE_RATIO = {
-    VEHICLE_CLASS_BUS: 0.022,
-    VEHICLE_CLASS_TRUCK: 0.020,
+    VEHICLE_CLASS_BUS: 0.032,
+    VEHICLE_CLASS_TRUCK: 0.030,
 }
 
 ROAD_ROI_DEFAULT_TOP_RATIO = 0.06
@@ -79,15 +79,15 @@ SUPPLEMENTAL_MOTORCYCLE_TILE_OVERLAP_RATIO = 0.16
 SUPPLEMENTAL_MOTORCYCLE_CONFIDENCE_FLOOR = 0.08
 # Run supplemental tile detection only every Nth analyzed frame to reduce compute.
 # TRACK_MAX_GAP_FRAMES=45 gives plenty of tolerance for missed frames.
-SUPPLEMENTAL_MOTORCYCLE_FRAME_STRIDE = 5
+SUPPLEMENTAL_MOTORCYCLE_FRAME_STRIDE = 3
 # Tiles are small crops — high imgsz has diminishing returns; cap at 640.
 SUPPLEMENTAL_MOTORCYCLE_IMGSZ = 640
 LINE_INTERSECTION_EPSILON = 1e-6
-CLOSE_LINE_PAIR_MAX_ANGLE_DEGREES = 20.0
-CLOSE_LINE_PAIR_MAX_GAP_RATIO = 0.50
-CLOSE_LINE_PAIR_MAX_TIME_GAP_SECONDS = 10.0
-CLOSE_LINE_PAIR_MAX_TANGENT_GAP_RATIO = 0.30
-CLOSE_LINE_PAIR_MIN_MATCHES = 3
+CLOSE_LINE_PAIR_MAX_ANGLE_DEGREES = 12.0
+CLOSE_LINE_PAIR_MAX_GAP_RATIO = 0.12
+CLOSE_LINE_PAIR_MAX_TIME_GAP_SECONDS = 5.0
+CLOSE_LINE_PAIR_MAX_TANGENT_GAP_RATIO = 0.18
+CLOSE_LINE_PAIR_MIN_MATCHES = 5
 
 _STOP_EVENTS: dict[UUID, threading.Event] = {}
 _STOP_EVENTS_LOCK = threading.Lock()
@@ -330,7 +330,7 @@ def build_process_config(overrides: Optional[dict] = None) -> ProcessConfig:
             if overrides.get("inference_imgsz") is not None
             else settings.default_inference_imgsz
         ),
-        320,
+        1152,
     )
     legacy_vehicle_min_confidence = float(
         overrides.get("vehicle_min_confidence")
@@ -2395,7 +2395,7 @@ def _load_count_lines(db, video: VideoUpload, site: Site) -> list[CountLine | Vi
             .order_by(CountLine.line_order.asc(), CountLine.created_at.asc())
         )
     )
-    return site_lines[:2]
+    return site_lines[:1]
 
 
 def _resolved_line(line: CountLine | VideoCountLine, width: int, height: int) -> tuple[tuple[int, int], tuple[int, int]]:
